@@ -1,0 +1,95 @@
+{
+  "name": "reactboilerplate",
+  "version": "1.0.0",
+  "main": "main.js",
+  "description": "Point of sale",
+  "author": "Sybersoc",
+  "license": "ISC",
+  "scripts": {
+    "start": "electron-forge start",
+    "build": "cross-env NODE_ENV=production webpack --config webpack.build.config.js --mode production",
+    "start:electron": "electron .",
+    "package": "webpack --config webpack.build.config.js && electron-forge package",
+    "make": "webpack --config webpack.build.config.js && electron-forge make",
+    "lint": "echo \"No linting configured\"",
+    "dev": "cross-env NODE_ENV=development webpack serve --config webpack.dev.config.js"
+  },
+  "config": {
+    "forge": {
+      "packagerConfig": {
+        "icon": "assets/icons/icon"
+      },
+      "makers": [
+        {
+          "name": "@electron-forge/maker-squirrel",
+          "config": {
+            "name": "reactboilerplate_app",
+            "setupIcon": "assets/icons/icon.ico"
+          }
+        },
+        {
+          "name": "@electron-forge/maker-zip",
+          "platforms": [
+            "darwin"
+          ]
+        },
+        {
+          "name": "@electron-forge/maker-deb",
+          "config": {}
+        },
+        {
+          "name": "@electron-forge/maker-rpm",
+          "config": {}
+        }
+      ]
+    }
+  },
+  "keywords": [],
+  "dependencies": {
+    "@react-pdf/renderer": "^3.4.5",
+    "@reduxjs/toolkit": "^2.5.0",
+    "axios": "^1.7.9",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "electron-devtools-installer": "^3.2.0",
+    "express": "^4.21.2",
+    "mongodb": "^6.11.0",
+    "mongoose": "^8.9.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.54.2",
+    "react-icons": "^5.4.0",
+    "react-number-format": "^5.4.3",
+    "react-redux": "^9.2.0",
+    "react-router-dom": "^7.0.2",
+    "react-toastify": "^11.0.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.26.0",
+    "@babel/plugin-proposal-private-methods": "^7.18.6",
+    "@babel/preset-env": "^7.26.0",
+    "@babel/preset-react": "^7.26.3",
+    "@electron-forge/cli": "^6.0.0-beta.63",
+    "@electron-forge/maker-deb": "^7.8.0",
+    "@electron-forge/maker-rpm": "^7.8.0",
+    "@electron-forge/maker-squirrel": "^7.8.0",
+    "@electron-forge/maker-zip": "^7.8.0",
+    "autoprefixer": "^10.4.20",
+    "babel-loader": "^9.2.1",
+    "copy-webpack-plugin": "^12.0.2",
+    "cross-env": "^7.0.3",
+    "css-loader": "^7.1.2",
+    "electron": "^35.1.1",
+    "file-loader": "^6.2.0",
+    "html-webpack-plugin": "^5.6.3",
+    "mini-css-extract-plugin": "^2.9.2",
+    "postcss": "^8.4.49",
+    "postcss-loader": "^8.1.1",
+    "style-loader": "^4.0.0",
+    "tailwindcss": "^3.4.16",
+    "terser-webpack-plugin": "^5.3.10",
+    "webpack": "^5.97.1",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.1.0"
+  }
+}
