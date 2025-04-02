@@ -12,7 +12,8 @@
     "package": "webpack --config webpack.build.config.js && electron-forge package",
     "make": "webpack --config webpack.build.config.js && electron-forge make",
     "lint": "echo \"No linting configured\"",
-    "dev": "cross-env NODE_ENV=development webpack serve --config webpack.dev.config.js"
+    "dev": "cross-env NODE_ENV=development webpack serve --config webpack.dev.config.js",
+    "sync": "node syncToCloud.js"
   },
   "config": {
     "forge": {
@@ -53,7 +54,9 @@
     "dotenv": "^16.4.7",
     "electron-devtools-installer": "^3.2.0",
     "express": "^4.21.2",
-    "mongodb": "^6.11.0",
+    "file-saver": "^2.0.5",
+    "lucide-react": "^0.487.0",
+    "mongodb": "^6.15.0",
     "mongoose": "^8.9.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -62,7 +65,8 @@
     "react-number-format": "^5.4.3",
     "react-redux": "^9.2.0",
     "react-router-dom": "^7.0.2",
-    "react-toastify": "^11.0.2"
+    "react-toastify": "^11.0.2",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",

@@ -1,6 +1,9 @@
 const path = require('path');
 const url = require('url');
 const { app, BrowserWindow } = require('electron');
+const billRoutes = require("./src/routes/billRoutes");
+const packageRoutes = require("./src/routes/packageRoutes.js");
+const manualBill = require('./src/routes/manualBill.js')
 
 // ✅ Dev-only auto-reloader
 try {
@@ -17,19 +20,48 @@ const customerRoutes = require("./src/routes/customerRoutes.js");
 
 let mainWindow;
 const isDev = process.env.NODE_ENV === 'development';
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/ispos';
+const MONGO_URI_LOCAL = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/ispos';
+const MONGO_URI_CLOUD = process.env.MONGO_URI || 'mongodb+srv://ali777:9F1aGSgE1Qdl5OXs@cluster0.hxvs0cu.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+const MONGO_URI = isDev ? MONGO_URI_LOCAL : MONGO_URI_CLOUD;
+
 const PORT = process.env.PORT || 5000;
+
+// ---- Script To Sync Data every 10 minutes -----
+
+const { exec } = require("child_process");
+
+function startSyncInterval() {
+  const intervalMinutes = 1;
+
+  setInterval(() => {
+    console.log("🔁 Running background sync...");
+    exec("node syncToCloud.js", (err, stdout, stderr) => {
+      if (err) {
+        console.error("❌ Sync error:", err.message);
+        return;
+      }
+      if (stderr) {
+        console.error("⚠️ Sync stderr:", stderr);
+        return;
+      }
+      console.log(stdout.trim());
+    });
+  }, intervalMinutes * 60 * 1000);
+}
+
+//// ---------********  End Here Script Code ******---------
 
 // --- BACKEND SERVER ---
 function startBackendServer() {
   const backendApp = express();
 
   mongoose.connect(MONGO_URI)
-    .then(() => console.log("✅ MongoDB Connected"))
-    .catch((err) => {
-      console.error("❌ MongoDB Connection Error:", err);
-      process.exit(1);
-    });
+  .then(() => console.log(`✅ Connected to ${isDev ? 'Local MongoDB' : 'MongoDB Atlas'}`))
+  .catch((err) => {
+    console.error("❌ MongoDB Connection Error:", err);
+    process.exit(1);
+  });
+
 
   backendApp.use(cors());
   backendApp.use(bodyParser.json());
@@ -37,6 +69,10 @@ function startBackendServer() {
 
   backendApp.use('/api/customers', customerRoutes);
   backendApp.use("/api/serialNumber", serialNumberRoute);
+  backendApp.use("/api/bills", billRoutes);
+  backendApp.use("/api/packages", packageRoutes);
+  backendApp.use("/api/manualBill", manualBill);
+
 
   backendApp.get("/api/date", (req, res) => {
     res.json({ date: new Date().toISOString() });
@@ -106,6 +142,7 @@ function createMainWindow() {
 app.whenReady().then(() => {
   startBackendServer();
   createMainWindow();
+  startSyncInterval(); // ✅ auto sync every few minutes
 });
 
 app.on('window-all-closed', () => {

@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { useForm, Controller } from "react-hook-form"; // ✅ Correct
-import { NumericFormat } from "react-number-format";
+import { useForm, Controller } from "react-hook-form";
 import { PatternFormat } from "react-number-format";
-
 import axios from "axios";
 import { fetchSerialNumber, createCustomer } from "../api";
 
-const BASE_URL = "http://localhost:5000"; // Update if different
+const BASE_URL = "http://localhost:5000";
 
-const Form = () => {
+const Form = ({ initialData = null, onSubmit, onCancel }) => {
   const [serialNumber, setSerialNumber] = useState("");
   const [date, setDate] = useState("");
+  const [packages, setPackages] = useState([]);
+  const [selectedAmount, setSelectedAmount] = useState("");
 
   const {
     control,
@@ -19,127 +19,182 @@ const Form = () => {
     formState: { errors },
     reset,
     setValue,
+    watch,
   } = useForm();
 
+  const selectedPackageId = watch("packageId");
+
   useEffect(() => {
-    const fetchSerialAndDate = async () => {
+    const fetchInitialData = async () => {
       try {
-        // SERIAL NUMBER: Check localStorage first
-        const storedSerial = localStorage.getItem("serialNumber");
-        if (storedSerial) {
-          setSerialNumber(storedSerial);
-        } else {
-          const serial = await fetchSerialNumber();
-          setSerialNumber(serial || "");
-          localStorage.setItem("serialNumber", serial || "");
+        // For create mode only
+        if (!initialData) {
+          const storedSerial = localStorage.getItem("serialNumber");
+          if (storedSerial) {
+            setSerialNumber(storedSerial);
+          } else {
+            const serial = await fetchSerialNumber();
+            setSerialNumber(serial || "");
+            localStorage.setItem("serialNumber", serial || "");
+          }
         }
 
-        // DATE: Fetch current server date
+        // Date
         const response = await axios.get(`${BASE_URL}/api/date`);
-        const fetchedDate = response.data.date;
-        const formattedDate = new Date(fetchedDate).toISOString().split("T")[0];
-        setDate(formattedDate);
-        setValue("expiryDate", formattedDate); // set default for expiry date if needed
+        const fetchedDate = new Date(response.data.date)
+          .toISOString()
+          .split("T")[0];
+        setDate(fetchedDate);
+        if (!initialData) setValue("expiryDate", fetchedDate);
+
+        // Packages
+        const res = await axios.get(`${BASE_URL}/api/packages`);
+        setPackages(res.data);
       } catch (error) {
-        console.error("Error fetching serial number or date:", error);
-        alert("Error fetching serial number or date.");
+        console.error("Init error:", error);
+        alert("Error initializing form data.");
       }
     };
 
-    fetchSerialAndDate();
-  }, [setValue]);
+    fetchInitialData();
+  }, [initialData, setValue]);
 
-  // SUBMIT
-  const onSubmit = async (data) => {
+  useEffect(() => {
+    // Auto-fill amount when package selected
+    const pkg = packages.find((p) => p._id === selectedPackageId);
+    if (pkg) {
+      setValue("amount", pkg.defaultAmount);
+      setSelectedAmount(pkg.defaultAmount);
+    }
+  }, [selectedPackageId, packages, setValue]);
+
+  useEffect(() => {
+    // Populate form in edit mode
+    if (initialData) {
+      const cleanData = {
+        ...initialData,
+        billReceiveDate: initialData.billReceiveDate?.split("T")[0],
+        expiryDate: initialData.expiryDate?.split("T")[0],
+        billDate: initialData.billDate?.split("T")[0],
+        activationDate: initialData.activationDate?.split("T")[0],
+      };
+      reset(cleanData);
+    }
+  }, [initialData, reset]);
+
+  const handleFormSubmit = async (data) => {
+    const selectedPkg = packages.find((p) => p._id === data.packageId);
+    const payload = {
+      ...data,
+      billStatus: data.billStatus === "true",
+      packageName: selectedPkg?.name || "",
+    };
+
+    // Edit mode
+    if (initialData && onSubmit) {
+      return onSubmit(payload);
+    }
+
+    // Create mode
     try {
-      const payload = { ...data, serialNumber };
-      const response = await createCustomer(payload);
-      console.log("Invoice created:", response);
-      alert("Invoice submitted successfully!");
-      reset();
-      localStorage.removeItem("serialNumber");
+      const fullPayload = {
+        ...payload,
+        serialNumber,
+        billDate: new Date(),
+      };
 
-      // Fetch a fresh serial number for the next entry
+      await createCustomer(fullPayload);
+
+      // Prepare for next customer
+      localStorage.removeItem("serialNumber");
       const newSerial = await fetchSerialNumber();
       setSerialNumber(newSerial || "");
       localStorage.setItem("serialNumber", newSerial || "");
-    } catch (error) {
-      alert("Error submitting invoice. Check console for details.");
+
+      reset({
+        customerName: "",
+        phone: "",
+        address: "",
+        cnic: "",
+        packageId: "",
+        amount: "",
+        billStatus: "false",
+        email: "",
+        billReceiveDate: "",
+        expiryDate: date,
+        customerId: "",
+      });
+
+      setSelectedAmount("");
+      setValue("expiryDate", date);
+    } catch (err) {
+      console.error(err);
+      alert("Error submitting form");
     }
   };
 
   return (
-    <div className="w-full">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold mb-6">Create New Order</h2>
-        <h2 className="text-xl font-semibold mb-6 mx-5 text-gray-700">
-          Serial#: <span className="text-blue-700">{serialNumber}</span>
+    <div className="p-4 max-w-6xl mx-auto">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold">
+          {initialData ? "Edit Customer" : "Create New Order"}
         </h2>
+        {!initialData && (
+          <span className="text-gray-600">
+            Serial #:{" "}
+            <span className="text-blue-700 font-semibold">{serialNumber}</span>
+          </span>
+        )}
       </div>
 
       <form
-        onSubmit={handleSubmit(onSubmit)}
-        className="grid grid-cols-1 md:grid-cols-2 gap-6"
+        onSubmit={handleSubmit(handleFormSubmit)}
+        className="grid grid-cols-1 lg:grid-cols-3 gap-6"
       >
-        {/* LEFT SIDE */}
+        {/* LEFT */}
         <div className="space-y-4">
-          {/* Customer Name Input */}
           <div>
             <label className="block text-sm font-medium">Customer Name</label>
             <input
-              {...register("customerName", {
-                required: "Customer Name is required",
-              })}
-              type="text"
+              {...register("customerName", { required: "Name is required" })}
+              className="mt-1 p-2 w-full border rounded"
               placeholder="Enter customer name"
-              className="mt-1 p-2 w-full border rounded-md"
             />
             {errors.customerName && (
-              <p className="text-red-500 text-sm">
-                {errors.customerName.message}
-              </p>
+              <p className="text-red-500 text-sm">{errors.customerName.message}</p>
             )}
           </div>
 
-          {/* Phone Number Input with Formatting */}
           <div>
             <label className="block text-sm font-medium">Phone Number</label>
             <Controller
               name="phone"
               control={control}
-              rules={{ required: "Phone number is required" }}
+              rules={{ required: "Phone is required" }}
               render={({ field }) => (
                 <PatternFormat
-                  {...field}
-                  format="####-#######"
-                  allowEmptyFormatting
-                  mask="_"
-                  placeholder="0304-1234567"
-                  className="mt-1 p-2 w-full border rounded-md"
+                  value={field.value}
                   onValueChange={(val) => field.onChange(val.formattedValue)}
+                  format="####-#######"
+                  mask="_"
+                  placeholder="0300-1234567"
+                  className="mt-1 p-2 w-full border rounded"
                 />
               )}
             />
-            {errors.phone && (
-              <p className="text-red-500 text-sm">{errors.phone.message}</p>
-            )}
+            {errors.phone && <p className="text-red-500 text-sm">{errors.phone.message}</p>}
           </div>
 
-          {/* Address Input */}
           <div>
             <label className="block text-sm font-medium">Address</label>
             <input
               {...register("address", { required: "Address is required" })}
-              type="text"
+              className="mt-1 p-2 w-full border rounded"
               placeholder="Enter address"
-              className="mt-1 p-2 w-full border rounded-md"
             />
-            {errors.address && (
-              <p className="text-red-500 text-sm">{errors.address.message}</p>
-            )}
+            {errors.address && <p className="text-red-500 text-sm">{errors.address.message}</p>}
           </div>
 
-          {/* CNIC Input with Formatting */}
           <div>
             <label className="block text-sm font-medium">CNIC</label>
             <Controller
@@ -148,121 +203,143 @@ const Form = () => {
               rules={{ required: "CNIC is required" }}
               render={({ field }) => (
                 <PatternFormat
-                  {...field}
+                  value={field.value}
+                  onValueChange={(val) => field.onChange(val.formattedValue)}
                   format="#####-#######-#"
-                  allowEmptyFormatting
                   mask="_"
                   placeholder="33100-1234567-1"
-                  className="mt-1 p-2 w-full border rounded-md"
-                  onValueChange={(val) => field.onChange(val.formattedValue)}
+                  className="mt-1 p-2 w-full border rounded"
                 />
               )}
             />
-            {errors.cnic && (
-              <p className="text-red-500 text-sm">{errors.cnic.message}</p>
-            )}
+            {errors.cnic && <p className="text-red-500 text-sm">{errors.cnic.message}</p>}
           </div>
         </div>
 
-        {/* RIGHT SIDE */}
+        {/* MIDDLE */}
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium">Expiry Date</label>
-            <input
-              {...register("expiryDate", {
-                required: "Expiry date is required",
+            <label className="block text-sm font-medium">Package</label>
+            <select
+              {...register("packageId", {
+                required: "Please select a package",
               })}
-              type="date"
-              defaultValue={date}
-              className="mt-1 p-2 w-full border rounded-md"
-            />
-            {errors.expiryDate && (
-              <p className="text-red-500 text-sm">
-                {errors.expiryDate.message}
-              </p>
+              className="mt-1 p-2 w-full border rounded"
+            >
+              <option value="">-- Select Package --</option>
+              {packages.map((pkg) => (
+                <option key={pkg._id} value={pkg._id}>
+                  {pkg.name} - Rs {pkg.defaultAmount}
+                </option>
+              ))}
+            </select>
+            {errors.packageId && (
+              <p className="text-red-500 text-sm">{errors.packageId.message}</p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium">
-              Bill Reveive Date
-            </label>
+            <label className="block text-sm font-medium">Bill Amount</label>
             <input
-              {...register("receivingDate", {
-                required: "Receiving date is required",
-              })}
-              type="date"
-              className="mt-1 p-2 w-full border rounded-md"
+              {...register("amount", { required: "Amount is required" })}
+              type="number"
+              className="mt-1 p-2 w-full border rounded"
+              placeholder="Enter bill amount"
             />
-            {errors.receivingDate && (
-              <p className="text-red-500 text-sm">
-                {errors.receivingDate.message}
-              </p>
-            )}
+            {errors.amount && <p className="text-red-500 text-sm">{errors.amount.message}</p>}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium">Customer ID</label>
-            <input
-              {...register("customerId", {
-                required: "Customer ID is required",
-              })}
-              type="text"
-              placeholder="Enter Customer ID"
-              className="mt-1 p-2 w-full border rounded-md"
-            />
-            {errors.customerId && (
-              <p className="text-red-500 text-sm">
-                {errors.customerId.message}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium">Email Address</label>
-            <input
-              {...register("email", {
-                required: "Email is required",
-                pattern: {
-                  value: /^\S+@\S+$/i,
-                  message: "Invalid email address",
-                },
-              })}
-              type="email"
-              placeholder="example@example.com"
-              className="mt-1 p-2 w-full border rounded-md"
-            />
-            {errors.email && (
-              <p className="text-red-500 text-sm">{errors.email.message}</p>
-            )}
-          </div>
           <div>
             <label className="block text-sm font-medium">Bill Status</label>
             <select
-              {...register("billStatus", {
-                required: "Please select bill status",
-              })}
-              className="mt-1 p-2 w-full border rounded-md"
+              {...register("billStatus", { required: "Select bill status" })}
+              className="mt-1 p-2 w-full border rounded"
               defaultValue="false"
             >
               <option value="false">Unpaid</option>
               <option value="true">Paid</option>
             </select>
             {errors.billStatus && (
-              <p className="text-red-500 text-sm">
-                {errors.billStatus.message}
-              </p>
+              <p className="text-red-500 text-sm">{errors.billStatus.message}</p>
             )}
           </div>
 
-          <div className="pt-6">
-            <button
-              type="submit"
-              className="bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition duration-200 w-full"
-            >
-              Submit
-            </button>
+          <div>
+            <label className="block text-sm font-medium">Email</label>
+            <input
+              {...register("email", {
+                required: "Email required",
+                pattern: {
+                  value: /^\S+@\S+$/i,
+                  message: "Invalid email format",
+                },
+              })}
+              type="email"
+              placeholder="example@mail.com"
+              className="mt-1 p-2 w-full border rounded"
+            />
+            {errors.email && <p className="text-red-500 text-sm">{errors.email.message}</p>}
           </div>
+        </div>
+
+        {/* RIGHT */}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium">Bill Receive Date</label>
+            <input
+              {...register("billReceiveDate", {
+                required: "Bill receive date required",
+              })}
+              type="date"
+              className="mt-1 p-2 w-full border rounded"
+            />
+            {errors.billReceiveDate && (
+              <p className="text-red-500 text-sm">{errors.billReceiveDate.message}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium">Expiry Date</label>
+            <input
+              {...register("expiryDate", { required: "Expiry date required" })}
+              type="date"
+              className="mt-1 p-2 w-full border rounded"
+            />
+            {errors.expiryDate && (
+              <p className="text-red-500 text-sm">{errors.expiryDate.message}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium">Customer ID</label>
+            <input
+              {...register("customerId", { required: "Customer ID required" })}
+              placeholder="Enter ID"
+              className="mt-1 p-2 w-full border rounded"
+            />
+            {errors.customerId && (
+              <p className="text-red-500 text-sm">{errors.customerId.message}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Buttons */}
+        <div className="lg:col-span-3 text-center mt-6 flex justify-center gap-4">
+          <button
+            type="submit"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded"
+          >
+            {initialData ? "Update" : "Submit"}
+          </button>
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="bg-gray-300 hover:bg-gray-400 text-black px-6 py-2 rounded"
+            >
+              Cancel
+            </button>
+          )}
         </div>
       </form>
     </div>

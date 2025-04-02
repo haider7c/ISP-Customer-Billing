@@ -5,7 +5,6 @@ const customerSchema = new mongoose.Schema(
     serialNumber: {
       type: String,
       required: true,
-      unique: true,
     },
     customerName: {
       type: String,
@@ -52,7 +51,27 @@ const customerSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
- 
+    synced: {
+        type: Boolean,
+        default: false,
+      },
+    packageName: {
+       type: String,
+       required: true,
+    },
+    paymentMethod: {
+      type: String,
+      enum: ['Cash', 'Online'],
+    },
+    paymentNote: {
+      type: String,
+      trim: true,
+    },
+    amount:{
+      type:Number
+    }
+    
+            
   },
   {
     timestamps: true,

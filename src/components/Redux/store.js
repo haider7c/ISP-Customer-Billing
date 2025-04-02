@@ -1,8 +1,8 @@
 import { configureStore } from "@reduxjs/toolkit";
-import invoiceReducer from "./invoiceReducer";
+import manualBillReducer from "./manualBillSlice";
 
 export const store = configureStore({
   reducer: {
-    Invoice: invoiceReducer,
+    manualBill: manualBillReducer,
   },
 });

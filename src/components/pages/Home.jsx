@@ -66,7 +66,7 @@ const Home = () => {
               <h1 className="text-2xl max-w-32 text-left font-bold mt-8">
                 Create New Customer
               </h1>
-              <p className="mt-12 text-sm text-white">
+              <p className="mt-5 text-sm text-white">
                 Start a new customer instantly
               </p>
             </div>
@@ -87,7 +87,7 @@ const Home = () => {
             <div className="flex flex-col items-start ml-5 mt-5">
               <div className="bg-white px-2 py-1 rounded-sm shadow-md">+</div>
               <h1 className="text-2xl max-w-32 text-left font-bold mt-8">
-                View Customers
+                Manage Billing
               </h1>
               <p className="mt-12 text-sm">Get the details of added customers</p>
             </div>
@@ -102,15 +102,15 @@ const Home = () => {
               width: "250px", // Optional width
             }}
             className="hover:cursor-pointer"
-            onClick={() => navigate("/orderspage")}
+            onClick={() => navigate("/manage")}
           >
             {" "}
             <div className="flex flex-col items-start ml-5 mt-5">
               <div className="bg-white px-2 py-1 rounded-sm shadow-md">+</div>
               <h1 className="text-2xl max-w-32 text-left font-bold mt-8">
-                Manage Orders
+                View & Update All Customers
               </h1>
-              <p className="mt-12 text-sm">Manage all Orders edit</p>
+              <p className="mt-5 text-sm">Manage all Orders edit</p>
             </div>
           </div>
           {/* button 3  */}
@@ -125,15 +125,16 @@ const Home = () => {
               height: "250px", // Set a height for the div
               width: "250px", // Optional width
             }}
+            onClick={()=>{navigate("/packagemanager")}}
             className="hover:cursor-pointer"
           >
             {" "}
             <div className="flex flex-col items-start ml-5 mt-5">
               <div className="bg-white px-2 py-1 rounded-sm shadow-md">+</div>
               <h1 className="text-2xl max-w-32 text-left font-bold mt-8">
-                Manage Orders
+                Manage Packages
               </h1>
-              <p className="mt-12 text-sm">Manage all Orders edit</p>
+              <p className="mt-12 text-sm">Manage all packages edit</p>
             </div>
           </div>
           {/* Button 1  */}
@@ -145,15 +146,16 @@ const Home = () => {
               height: "250px", // Set a height for the div
               width: "250px", // Optional width
             }}
+            onClick={()=>{navigate("/manualBill")}}
             className="hover:cursor-pointer"
           >
             {" "}
             <div className="flex flex-col items-start ml-5 mt-5">
               <div className="bg-white px-2 py-1 rounded-sm shadow-md">+</div>
               <h1 className="text-2xl max-w-32 text-left font-bold mt-8">
-                Manage Orders
+                Manually Generate BIll
               </h1>
-              <p className="mt-12 text-sm">Manage all Orders edit</p>
+              <p className="mt-5 text-sm">Generate & Print Bill</p>
             </div>
           </div>
           {/* Button 2  */}
@@ -166,14 +168,16 @@ const Home = () => {
               width: "250px", // Optional width
             }}
             className="hover:cursor-pointer"
+            onClick={()=>{navigate("/manualBillView")}}
+
           >
             {" "}
             <div className="flex flex-col items-start ml-5 mt-5">
               <div className="bg-white px-2 py-1 rounded-sm shadow-md">+</div>
               <h1 className="text-2xl max-w-32 text-left font-bold mt-8">
-                Manage Orders
+                View All Saved Bills
               </h1>
-              <p className="mt-12 text-sm">Manage all Orders edit</p>
+              <p className="mt-12 text-sm">View All Bills</p>
             </div>
           </div>
           {/* button 3  */}
