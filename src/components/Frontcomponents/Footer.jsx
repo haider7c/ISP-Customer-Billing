@@ -48,7 +48,7 @@ const Footer = () => {
       <div className="lg:mr-44">
         <p className="flex items-center gap-1 text-gray-600">
           <FaRegCopyright />
-          <span>2012 - 2024 Invoice-Generator.com</span>
+          {/* <span>2012 - 2024 Invoice-Generator.com</span> */}
         </p>
         <div className="flex lg:flex-row gap-2 my-3">
           <FaFacebookSquare size={30} />

@@ -10,6 +10,7 @@ const CustomerList = () => {
   const [customerData, setCustomerData] = useState([]);
   const [searchField, setSearchField] = useState('customerId');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [showModal, setShowModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
 
@@ -27,13 +28,21 @@ const CustomerList = () => {
 
   const sortByReceiveDateDesc = (a, b) => new Date(b.billReceiveDate) - new Date(a.billReceiveDate);
 
-  const filteredData = customerData.filter((c) => {
-    const value = (c[searchField] || '').toString().toLowerCase();
-    return value.includes(searchQuery.toLowerCase());
-  });
+  const filteredData = customerData
+    .filter((c) => c.billReceiveDate?.startsWith(selectedMonth))
+    .filter((c) => {
+      const value = (c[searchField] || '').toString().toLowerCase();
+      return value.includes(searchQuery.toLowerCase());
+    });
 
   const unpaidBills = filteredData.filter((c) => c.billStatus === false).sort(sortByReceiveDateDesc);
   const paidBills = filteredData.filter((c) => c.billStatus === true).sort(sortByReceiveDateDesc);
+
+  const todayDay = new Date().getDate();
+  const reminderCustomers = filteredData.filter((c) => {
+    const billDate = new Date(c.billReceiveDate);
+    return billDate.getDate() === todayDay && !c.billStatus;
+  });
 
   const markAsPaid = async (id, method, note) => {
     try {
@@ -82,8 +91,34 @@ const CustomerList = () => {
 
   return (
     <div className="p-4 max-w-7xl mx-auto">
-      <h2 className="text-2xl font-bold mb-6">📄 Customer Bills</h2>
+      <h2 className="text-2xl font-bold mb-4">📄 Customer Bills</h2>
 
+      {/* Month Picker */}
+      <div className="mb-4">
+        <label className="font-medium mr-2">Select Month:</label>
+        <input
+          type="month"
+          value={selectedMonth}
+          onChange={(e) => setSelectedMonth(e.target.value)}
+          className="border p-2 rounded"
+        />
+      </div>
+
+      {/* Reminder Section */}
+      {reminderCustomers.length > 0 && (
+        <div className="mb-6 p-4 bg-yellow-100 border border-yellow-400 rounded">
+          <h3 className="text-lg font-semibold mb-2 text-yellow-800">🔔 Today's Bill Reminders</h3>
+          <ul className="list-disc pl-6">
+            {reminderCustomers.map((c) => (
+              <li key={c._id}>
+                {c.customerName} (ID: {c.customerId}) - Due Today ({c.billReceiveDate.split('T')[0]})
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Search Inputs */}
       <div className="mb-6 flex flex-col md:flex-row items-center gap-4">
         <select
           className="border rounded p-2"
@@ -103,6 +138,7 @@ const CustomerList = () => {
         />
       </div>
 
+      {/* Bill Grids */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div>
           <h3 className="text-xl font-semibold text-red-700 mb-3">Unpaid Bills</h3>
@@ -183,6 +219,7 @@ const CustomerList = () => {
         </div>
       </div>
 
+      {/* Receipt Modal */}
       {showModal && selectedCustomer && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
           <div className="bg-white p-4 rounded shadow-lg w-[250px] h-[320px] relative flex flex-col items-center">
@@ -207,6 +244,7 @@ const CustomerList = () => {
         </div>
       )}
 
+      {/* Import/Export */}
       <div className="mt-6 flex flex-col sm:flex-row gap-4">
         <input type="file" accept=".xlsx, .xls" onChange={handleImport} className="border p-2" />
         <button onClick={exportToExcel} className="bg-green-600 text-white px-4 py-2 rounded">

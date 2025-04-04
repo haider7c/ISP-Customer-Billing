@@ -17,13 +17,12 @@ const Default = () => {
         className="flex flex-col items-center max-h-screen"
       >
         <h1 className="text-white text-5xl font-bold mt-44">
-          Effortless Rice Order
+          Effortless Orders
         </h1>
         <h1 className="text-white text-5xl font-bold">Management</h1>
         <p className="text-white mt-5 max-w-xl text-center">
-          Add new orders, generate invoices instantly, and simplify your rice
-          delivery, sales, and buying operations in one place. Login to Get
-          Started. Ali Haider
+          Add new orders, generate invoices instantly, and simplify your sales operations in one place. Login to Get
+          Started.
         </p>
         <button
           className="bg-customGreen text-white rounded-full px-8 cursor-pointer py-2 shadow-lg mt-5"

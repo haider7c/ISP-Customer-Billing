@@ -42,8 +42,9 @@ const NavBar = () => {
             {menuItems.map((item, index) => (
               <div
                 key={index}
-                className="hover:cursor-pointer text-gray-600 hover:text-green-600"
+                className="hover:cursor-pointer text-gray-600 hover:text-green-600 font-bold border-1 border-black"
                 onClick={() => navigate(item.link)} // Wrap navigate in an arrow function
+
               >
                 {item.name}
               </div>
