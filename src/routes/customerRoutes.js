@@ -18,13 +18,17 @@ router.post("/", async (req, res) => {
 // READ - Get all customers
 router.get("/", async (req, res) => {
   try {
+    console.log("⚡ Fetching customers...");
     const customers = await Customer.find();
-    res.status(200).json(customers);
-  } catch (error) {
-    console.error("Error fetching customers:", error);
-    res.status(500).json({ error: "Failed to fetch customers" });
+
+    console.log("✅ Found", customers.length, "customers");
+    res.json(customers);
+  } catch (err) {
+    console.error("❌ Error in /api/customers:", err.message);
+    res.status(500).json({ error: "Failed to fetch customers", details: err.message });
   }
 });
+
 
 // DELETE - Remove a customer by ID
 router.delete("/:id", async (req, res) => {
