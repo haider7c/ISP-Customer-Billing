@@ -17,6 +17,7 @@ const packageRoutes = require("./src/routes/packageRoutes.js");
 const manualBill = require('./src/routes/manualBill.js');
 const serialNumberRoute = require("./src/routes/SerialNumber.js");
 const customerRoutes = require("./src/routes/customerRoutes.js");
+const billStatusRoutes = require("./src/routes/billStatusRoutes.js")
 
 // Models for sync logic
 const Customer = require("./src/models/Customer");
@@ -67,6 +68,7 @@ function startBackendServer() {
   backendApp.use("/api/bills", billRoutes);
   backendApp.use("/api/packages", packageRoutes);
   backendApp.use("/api/manualBill", manualBill);
+  backendApp.use("/api/billStatus", billStatusRoutes);
 
   backendApp.get("/api/date", (req, res) => {
     res.json({ date: new Date().toISOString() });

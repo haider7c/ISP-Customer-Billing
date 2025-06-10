@@ -34,7 +34,6 @@ root.render(
       <Router>
       <NavBar/>
         <Routes>
-          
           <Route path="/" element={<App />} />
           <Route path="/login" element={<Login />} />
           <Route path="/home" element={<Home />} />
@@ -45,7 +44,6 @@ root.render(
           <Route path="/packagemanager" element={<PackageManager />} />
           <Route path="/manualbill" element={<ManualBill />} />
           <Route path="/manualBillView" element={<ManualBillViewer />} />
-
         </Routes>
         <Footer />
       </Router>

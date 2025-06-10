@@ -22,7 +22,7 @@ const customerSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    expiryDate: {
+    regDate: {
       type: Date,
       required: true,
     },
@@ -42,15 +42,6 @@ const customerSchema = new mongoose.Schema(
       required: true,
     },
 
-    // ✅ Billing fields
-    billStatus: {
-      type: Boolean,
-      default: false, // false = unpaid, true = paid
-    },
-    billDate: {
-      type: Date,
-      default: Date.now,
-    },
     synced: {
         type: Boolean,
         default: false,
@@ -59,14 +50,7 @@ const customerSchema = new mongoose.Schema(
        type: String,
        required: true,
     },
-    paymentMethod: {
-      type: String,
-      enum: ['Cash', 'Online'],
-    },
-    paymentNote: {
-      type: String,
-      trim: true,
-    },
+  
     amount:{
       type:Number
     }

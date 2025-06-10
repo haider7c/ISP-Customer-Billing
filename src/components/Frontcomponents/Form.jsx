@@ -45,7 +45,7 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
           .toISOString()
           .split("T")[0];
         setDate(fetchedDate);
-        if (!initialData) setValue("expiryDate", fetchedDate);
+        if (!initialData) setValue("regDate", fetchedDate);
 
         // Packages
         const res = await axios.get(`${BASE_URL}/api/packages`);
@@ -74,7 +74,7 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
       const cleanData = {
         ...initialData,
         billReceiveDate: initialData.billReceiveDate?.split("T")[0],
-        expiryDate: initialData.expiryDate?.split("T")[0],
+        regDate: initialData.regDate?.split("T")[0],
         billDate: initialData.billDate?.split("T")[0],
         activationDate: initialData.activationDate?.split("T")[0],
       };
@@ -117,16 +117,14 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
         address: "",
         cnic: "",
         packageId: "",
-        amount: "",
-        billStatus: "false",
         email: "",
         billReceiveDate: "",
-        expiryDate: date,
+        regDate: date,
         customerId: "",
       });
 
       setSelectedAmount("");
-      setValue("expiryDate", date);
+      setValue("regsDate", date);
     } catch (err) {
       console.error(err);
       alert("Error submitting form");
@@ -161,7 +159,9 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
               placeholder="Enter customer name"
             />
             {errors.customerName && (
-              <p className="text-red-500 text-sm">{errors.customerName.message}</p>
+              <p className="text-red-500 text-sm">
+                {errors.customerName.message}
+              </p>
             )}
           </div>
 
@@ -182,7 +182,9 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
                 />
               )}
             />
-            {errors.phone && <p className="text-red-500 text-sm">{errors.phone.message}</p>}
+            {errors.phone && (
+              <p className="text-red-500 text-sm">{errors.phone.message}</p>
+            )}
           </div>
 
           <div>
@@ -192,27 +194,9 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
               className="mt-1 p-2 w-full border rounded"
               placeholder="Enter address"
             />
-            {errors.address && <p className="text-red-500 text-sm">{errors.address.message}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium">CNIC</label>
-            <Controller
-              name="cnic"
-              control={control}
-              rules={{ required: "CNIC is required" }}
-              render={({ field }) => (
-                <PatternFormat
-                  value={field.value}
-                  onValueChange={(val) => field.onChange(val.formattedValue)}
-                  format="#####-#######-#"
-                  mask="_"
-                  placeholder="33100-1234567-1"
-                  className="mt-1 p-2 w-full border rounded"
-                />
-              )}
-            />
-            {errors.cnic && <p className="text-red-500 text-sm">{errors.cnic.message}</p>}
+            {errors.address && (
+              <p className="text-red-500 text-sm">{errors.address.message}</p>
+            )}
           </div>
         </div>
 
@@ -237,33 +221,6 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
               <p className="text-red-500 text-sm">{errors.packageId.message}</p>
             )}
           </div>
-
-          <div>
-            <label className="block text-sm font-medium">Bill Amount</label>
-            <input
-              {...register("amount", { required: "Amount is required" })}
-              type="number"
-              className="mt-1 p-2 w-full border rounded"
-              placeholder="Enter bill amount"
-            />
-            {errors.amount && <p className="text-red-500 text-sm">{errors.amount.message}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium">Bill Status</label>
-            <select
-              {...register("billStatus", { required: "Select bill status" })}
-              className="mt-1 p-2 w-full border rounded"
-              defaultValue="false"
-            >
-              <option value="false">Unpaid</option>
-              <option value="true">Paid</option>
-            </select>
-            {errors.billStatus && (
-              <p className="text-red-500 text-sm">{errors.billStatus.message}</p>
-            )}
-          </div>
-
           <div>
             <label className="block text-sm font-medium">Email</label>
             <input
@@ -278,35 +235,82 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
               placeholder="example@mail.com"
               className="mt-1 p-2 w-full border rounded"
             />
-            {errors.email && <p className="text-red-500 text-sm">{errors.email.message}</p>}
+            {errors.email && (
+              <p className="text-red-500 text-sm">{errors.email.message}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium">CNIC</label>
+            <Controller
+              name="cnic"
+              control={control}
+              rules={{ required: "CNIC is required" }}
+              render={({ field }) => (
+                <PatternFormat
+                  value={field.value}
+                  onValueChange={(val) => field.onChange(val.formattedValue)}
+                  format="#####-#######-#"
+                  mask="_"
+                  placeholder="33100-1234567-1"
+                  className="mt-1 p-2 w-full border rounded"
+                />
+              )}
+            />
+            {errors.cnic && (
+              <p className="text-red-500 text-sm">{errors.cnic.message}</p>
+            )}
           </div>
         </div>
 
         {/* RIGHT */}
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium">Bill Receive Date</label>
+            <label className="block text-sm font-medium">
+              Bill Receive Date
+            </label>
             <input
               {...register("billReceiveDate", {
-                required: "Bill receive date required",
+                required: "Bill receive date is required",
+                validate: {
+                  validDate: (value) => {
+                    const date = new Date(value);
+                    return (
+                      !isNaN(date.getTime()) || "Please enter a valid date"
+                    );
+                  },
+                  notFuture: (value) => {
+                    const selectedDate = new Date(value);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0); // Reset time to compare dates only
+                    return (
+                      selectedDate <= today || "Date cannot be in the future"
+                    );
+                  },
+                },
               })}
               type="date"
               className="mt-1 p-2 w-full border rounded"
+              max={new Date().toISOString().split("T")[0]} // Set max to today's date
             />
             {errors.billReceiveDate && (
-              <p className="text-red-500 text-sm">{errors.billReceiveDate.message}</p>
+              <p className="text-red-500 text-sm">
+                {errors.billReceiveDate.message}
+              </p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium">Expiry Date</label>
+            <label className="block text-sm font-medium">
+              Registration Date
+            </label>
             <input
-              {...register("expiryDate", { required: "Expiry date required" })}
+              {...register("regDate", { required: "Register date required" })}
               type="date"
               className="mt-1 p-2 w-full border rounded"
             />
-            {errors.expiryDate && (
-              <p className="text-red-500 text-sm">{errors.expiryDate.message}</p>
+            {errors.regDate && (
+              <p className="text-red-500 text-sm">{errors.regDate.message}</p>
             )}
           </div>
 
@@ -318,7 +322,9 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
               className="mt-1 p-2 w-full border rounded"
             />
             {errors.customerId && (
-              <p className="text-red-500 text-sm">{errors.customerId.message}</p>
+              <p className="text-red-500 text-sm">
+                {errors.customerId.message}
+              </p>
             )}
           </div>
         </div>

@@ -30,6 +30,22 @@ router.get("/", async (req, res) => {
 });
 
 
+// READ - Get a single customer by ID
+router.get("/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const customer = await Customer.findById(id);
+    if (!customer) {
+      return res.status(404).json({ message: "Customer not found" });
+    }
+    res.status(200).json(customer);
+  } catch (error) {
+    console.error("Error fetching customer by ID:", error.message);
+    res.status(500).json({ error: "Failed to fetch customer", details: error.message });
+  }
+});
+
+
 // DELETE - Remove a customer by ID
 router.delete("/:id", async (req, res) => {
   const { id } = req.params;
