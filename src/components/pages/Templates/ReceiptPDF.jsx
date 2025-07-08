@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 import {
   Page,
   Text,
@@ -7,18 +7,18 @@ import {
   StyleSheet,
   Font,
   Image,
-} from '@react-pdf/renderer';
+} from "@react-pdf/renderer";
 
-import logo from '../../../../assets/pdflogo.png';
+import logo from "../../../../assets/logo.png";
 
 // A7 dimensions in points
 const A7_WIDTH = 2.9 * 72; // 209
-const A7_HEIGHT = 4.1 * 72; // 295
+const A7_HEIGHT = 3.7 * 72; // 295
 
 Font.register({
-  family: 'Helvetica-Bold',
+  family: "Helvetica-Bold",
   fonts: [
-    { src: 'https://fonts.gstatic.com/s/helvetica/v15/sZlLxdL6pN4lAVxNmA.ttf' },
+    { src: "https://fonts.gstatic.com/s/helvetica/v15/sZlLxdL6pN4lAVxNmA.ttf" },
   ],
 });
 
@@ -26,57 +26,53 @@ const styles = StyleSheet.create({
   page: {
     width: A7_WIDTH,
     height: A7_HEIGHT,
-    padding: 10,
+    paddingHorizontal: 10,
+    paddingBottom: 10,
     fontSize: 10,
-    fontFamily: 'Helvetica',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'space-between',
-    border: '1pt solid #ddd',
+    fontFamily: "Helvetica",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+    border: "1pt solid #ddd",
   },
   titleBar: {
-    textAlign: 'center',
+    textAlign: "center",
     paddingBottom: 5,
-    borderBottom: '1pt dashed #999',
-    // marginBottom: 5,
+    borderBottom: "1pt dashed #999",
   },
   logo: {
     width: 90,
-    height: 50,
+    height: 40,
     marginBottom: 4,
-    alignSelf: 'center',
-  },
-  table: {
-    marginBottom: 10,
+    alignSelf: "center",
   },
   tableRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingVertical: 2,
-    borderBottom: '1pt solid #eee',
+    borderBottom: "1pt solid #eee",
   },
   cellLabel: {
-    width: '45%',
-    fontFamily: 'Helvetica-Bold',
+    width: "45%",
+    fontFamily: "Helvetica-Bold",
   },
   cellValue: {
-    width: '55%',
-    textAlign: 'right',
+    width: "55%",
+    textAlign: "right",
   },
   statusPaid: {
-    color: 'green',
+    color: "black",
     fontWeight: 700,
   },
   statusUnpaid: {
-    color: 'red',
+    color: "black",
     fontWeight: 700,
   },
   footer: {
     fontSize: 8,
-    textAlign: 'center',
-    borderTop: '1pt dashed #999',
+    textAlign: "center",
+    borderTop: "1pt dashed #999",
     paddingTop: 6,
-    marginTop: 6,
   },
 });
 
@@ -94,7 +90,24 @@ const ReceiptPDF = ({ customer }) => {
     billReceiveDate,
   } = customer;
 
-  const formatDate = (date) => new Date(date).toLocaleDateString('en-GB');
+  const formatDate = (date) => new Date(date).toLocaleDateString("en-GB");
+  
+  // CNIC masking function
+  const maskCNIC = (cnic) => {
+    if (!cnic) return "N/A";
+    
+    // Remove all non-digit characters
+    const digits = cnic.replace(/\D/g, "");
+    
+    if (digits.length === 0) return "N/A";
+    
+    // Mask all digits except the last one
+    const masked = digits
+      .slice(0, -1)
+      .replace(/\d/g, "#") + digits.slice(-1);
+    
+    return masked;
+  };
 
   return (
     <Document>
@@ -106,12 +119,7 @@ const ReceiptPDF = ({ customer }) => {
         </View>
 
         {/* Table Format */}
-        <View style={styles.table}>
-
-          <View style={styles.tableRow}>
-            <Text style={styles.cellLabel}>Customer ID</Text>
-            <Text style={styles.cellValue}>{customerId}</Text>
-          </View>
+        <View>
           <View style={styles.tableRow}>
             <Text style={styles.cellLabel}>Name</Text>
             <Text style={styles.cellValue}>{customerName}</Text>
@@ -122,7 +130,7 @@ const ReceiptPDF = ({ customer }) => {
           </View>
           <View style={styles.tableRow}>
             <Text style={styles.cellLabel}>CNIC</Text>
-            <Text style={styles.cellValue}>{cnic}</Text>
+            <Text style={styles.cellValue}>{maskCNIC(cnic)}</Text>
           </View>
           <View style={styles.tableRow}>
             <Text style={styles.cellLabel}>Package</Text>
@@ -140,12 +148,12 @@ const ReceiptPDF = ({ customer }) => {
                 billStatus ? styles.statusPaid : styles.statusUnpaid,
               ]}
             >
-              {billStatus ? 'Paid' : 'Unpaid'}
+              {billStatus ? "Paid" : "Unpaid"}
             </Text>
           </View>
           <View style={styles.tableRow}>
             <Text style={styles.cellLabel}>Method</Text>
-            <Text style={styles.cellValue}>{paymentMethod || 'N/A'}</Text>
+            <Text style={styles.cellValue}>{paymentMethod || "N/A"}</Text>
           </View>
           {paymentNote && (
             <View style={styles.tableRow}>
@@ -154,8 +162,12 @@ const ReceiptPDF = ({ customer }) => {
             </View>
           )}
           <View style={styles.tableRow}>
-            <Text style={styles.cellLabel}>Date</Text>
+            <Text style={styles.cellLabel}>Bill Date</Text>
             <Text style={styles.cellValue}>{formatDate(billReceiveDate)}</Text>
+          </View>
+          <View style={styles.tableRow}>
+            <Text style={styles.cellLabel}>Receiving Date</Text>
+            <Text style={styles.cellValue}>{formatDate(new Date())}</Text>
           </View>
         </View>
 

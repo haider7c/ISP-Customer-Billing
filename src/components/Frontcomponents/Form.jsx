@@ -6,11 +6,12 @@ import { fetchSerialNumber, createCustomer } from "../api";
 
 const BASE_URL = "http://localhost:5000";
 
-const Form = ({ initialData = null, onSubmit, onCancel }) => {
+const Form = ({ initialData = null, onSubmit, onCancel, isSubmitting = false }) => {
   const [serialNumber, setSerialNumber] = useState("");
   const [date, setDate] = useState("");
   const [packages, setPackages] = useState([]);
   const [selectedAmount, setSelectedAmount] = useState("");
+  const [loading, setLoading] = useState(true);
 
   const {
     control,
@@ -53,6 +54,8 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
       } catch (error) {
         console.error("Init error:", error);
         alert("Error initializing form data.");
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -131,11 +134,20 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="p-10 text-center">
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+        <p className="mt-3 text-gray-500">Loading form data...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">
-          {initialData ? "Edit Customer" : "Create New Order"}
+          {initialData ? "✏️ Edit Customer" : "➕ Create New Order"}
         </h2>
         {!initialData && (
           <span className="text-gray-600">
@@ -152,21 +164,26 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
         {/* LEFT */}
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium">Customer Name</label>
+            <label className="block text-sm font-medium mb-1">
+              Customer Name <span className="text-red-500">*</span>
+            </label>
             <input
               {...register("customerName", { required: "Name is required" })}
               className="mt-1 p-2 w-full border rounded"
               placeholder="Enter customer name"
+              disabled={isSubmitting}
             />
             {errors.customerName && (
-              <p className="text-red-500 text-sm">
+              <p className="text-red-500 text-sm mt-1">
                 {errors.customerName.message}
               </p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium">Phone Number</label>
+            <label className="block text-sm font-medium mb-1">
+              Phone Number <span className="text-red-500">*</span>
+            </label>
             <Controller
               name="phone"
               control={control}
@@ -179,23 +196,29 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
                   mask="_"
                   placeholder="0300-1234567"
                   className="mt-1 p-2 w-full border rounded"
+                  disabled={isSubmitting}
                 />
               )}
             />
             {errors.phone && (
-              <p className="text-red-500 text-sm">{errors.phone.message}</p>
+              <p className="text-red-500 text-sm mt-1">{errors.phone.message}</p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium">Address</label>
+            <label className="block text-sm font-medium mb-1">
+              Address <span className="text-red-500">*</span>
+            </label>
             <input
               {...register("address", { required: "Address is required" })}
               className="mt-1 p-2 w-full border rounded"
               placeholder="Enter address"
+              disabled={isSubmitting}
             />
             {errors.address && (
-              <p className="text-red-500 text-sm">{errors.address.message}</p>
+              <p className="text-red-500 text-sm mt-1">
+                {errors.address.message}
+              </p>
             )}
           </div>
         </div>
@@ -203,12 +226,15 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
         {/* MIDDLE */}
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium">Package</label>
+            <label className="block text-sm font-medium mb-1">
+              Package <span className="text-red-500">*</span>
+            </label>
             <select
               {...register("packageId", {
                 required: "Please select a package",
               })}
               className="mt-1 p-2 w-full border rounded"
+              disabled={isSubmitting}
             >
               <option value="">-- Select Package --</option>
               {packages.map((pkg) => (
@@ -218,11 +244,15 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
               ))}
             </select>
             {errors.packageId && (
-              <p className="text-red-500 text-sm">{errors.packageId.message}</p>
+              <p className="text-red-500 text-sm mt-1">
+                {errors.packageId.message}
+              </p>
             )}
           </div>
           <div>
-            <label className="block text-sm font-medium">Email</label>
+            <label className="block text-sm font-medium mb-1">
+              Email <span className="text-red-500">*</span>
+            </label>
             <input
               {...register("email", {
                 required: "Email required",
@@ -234,14 +264,19 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
               type="email"
               placeholder="example@mail.com"
               className="mt-1 p-2 w-full border rounded"
+              disabled={isSubmitting}
             />
             {errors.email && (
-              <p className="text-red-500 text-sm">{errors.email.message}</p>
+              <p className="text-red-500 text-sm mt-1">
+                {errors.email.message}
+              </p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium">CNIC</label>
+            <label className="block text-sm font-medium mb-1">
+              CNIC <span className="text-red-500">*</span>
+            </label>
             <Controller
               name="cnic"
               control={control}
@@ -254,11 +289,12 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
                   mask="_"
                   placeholder="33100-1234567-1"
                   className="mt-1 p-2 w-full border rounded"
+                  disabled={isSubmitting}
                 />
               )}
             />
             {errors.cnic && (
-              <p className="text-red-500 text-sm">{errors.cnic.message}</p>
+              <p className="text-red-500 text-sm mt-1">{errors.cnic.message}</p>
             )}
           </div>
         </div>
@@ -266,63 +302,46 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
         {/* RIGHT */}
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium">
+            <label className="block text-sm font-medium mb-1">
               Bill Receive Date
             </label>
             <input
-              {...register("billReceiveDate", {
-                required: "Bill receive date is required",
-                validate: {
-                  validDate: (value) => {
-                    const date = new Date(value);
-                    return (
-                      !isNaN(date.getTime()) || "Please enter a valid date"
-                    );
-                  },
-                  notFuture: (value) => {
-                    const selectedDate = new Date(value);
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0); // Reset time to compare dates only
-                    return (
-                      selectedDate <= today || "Date cannot be in the future"
-                    );
-                  },
-                },
-              })}
+              {...register("billReceiveDate")}
               type="date"
               className="mt-1 p-2 w-full border rounded"
-              max={new Date().toISOString().split("T")[0]} // Set max to today's date
+              disabled={isSubmitting}
             />
-            {errors.billReceiveDate && (
-              <p className="text-red-500 text-sm">
-                {errors.billReceiveDate.message}
-              </p>
-            )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium">
-              Registration Date
+            <label className="block text-sm font-medium mb-1">
+              Registration Date <span className="text-red-500">*</span>
             </label>
             <input
               {...register("regDate", { required: "Register date required" })}
               type="date"
               className="mt-1 p-2 w-full border rounded"
+              disabled={isSubmitting}
             />
             {errors.regDate && (
-              <p className="text-red-500 text-sm">{errors.regDate.message}</p>
+              <p className="text-red-500 text-sm mt-1">
+                {errors.regDate.message}
+              </p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium">Customer ID</label>
+            <label className="block text-sm font-medium mb-1">
+              Customer ID <span className="text-red-500">*</span>
+            </label>
             <input
               {...register("customerId", { required: "Customer ID required" })}
               placeholder="Enter ID"
               className="mt-1 p-2 w-full border rounded"
+              disabled={isSubmitting}
             />
             {errors.customerId && (
-              <p className="text-red-500 text-sm">
+              <p className="text-red-500 text-sm mt-1">
                 {errors.customerId.message}
               </p>
             )}
@@ -333,15 +352,27 @@ const Form = ({ initialData = null, onSubmit, onCancel }) => {
         <div className="lg:col-span-3 text-center mt-6 flex justify-center gap-4">
           <button
             type="submit"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded"
+            className={`bg-blue-600 text-white px-6 py-2 rounded flex items-center justify-center min-w-[100px] ${
+              isSubmitting ? "opacity-70 cursor-not-allowed" : "hover:bg-blue-700"
+            }`}
+            disabled={isSubmitting}
           >
-            {initialData ? "Update" : "Submit"}
+            {isSubmitting ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                {initialData ? "Updating..." : "Submitting..."}
+              </>
+            ) : initialData ? "Update" : "Submit"}
           </button>
           {onCancel && (
             <button
               type="button"
               onClick={onCancel}
               className="bg-gray-300 hover:bg-gray-400 text-black px-6 py-2 rounded"
+              disabled={isSubmitting}
             >
               Cancel
             </button>

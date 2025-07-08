@@ -19,10 +19,6 @@ const serialNumberRoute = require("./src/routes/SerialNumber.js");
 const customerRoutes = require("./src/routes/customerRoutes.js");
 const billStatusRoutes = require("./src/routes/billStatusRoutes.js")
 
-// Models for sync logic
-const Customer = require("./src/models/Customer");
-const Bill = require("./src/models/Bill");
-
 // ========================
 // Logging Setup
 // ========================
@@ -35,17 +31,18 @@ function logToFile(msg) {
 // ========================
 // Backend Server
 // ========================
-const LOCAL_MONGO_URI = 'mongodb://127.0.0.1:27017/ispos';
+const CLOUD_MONGO_URI = 'mongodb+srv://ali777:LsocA2ih5dDHa7av@cluster0.hxvs0cu.mongodb.net/ispos?retryWrites=true&w=majority&appName=Cluster0';
 const PORT = 5000;
 let mainWindow;
 
 function startBackendServer() {
   const backendApp = express();
 
-  mongoose.connect(LOCAL_MONGO_URI)
+  // Connect to cloud MongoDB
+  mongoose.connect(CLOUD_MONGO_URI)
     .then(() => {
-      console.log("✅ Connected to local MongoDB (ispos)");
-      logToFile("✅ Connected to local MongoDB (ispos)");
+      console.log("✅ Connected to MongoDB Atlas");
+      logToFile("✅ Connected to MongoDB Atlas");
     })
     .catch((err) => {
       console.error("❌ MongoDB Connection Error:", err);
@@ -96,13 +93,16 @@ function startBackendServer() {
 }
 
 // ========================
-// Cloud Sync Embedded Logic
+// Monthly Bill Creation
 // ========================
-async function runCloudSync() {
+async function createMonthlyBills() {
   try {
-    logToFile("🚀 Cloud sync started");
+    logToFile("🚀 Monthly bill creation started");
 
-    await mongoose.connect(LOCAL_MONGO_URI);
+    // Models
+    const Customer = require("./src/models/Customer");
+    const Bill = require("./src/models/Bill");
+
     const customers = await Customer.find();
     const currentMonth = new Date().toISOString().slice(0, 7);
 
@@ -118,97 +118,16 @@ async function runCloudSync() {
           billMonth: currentMonth,
           billReceiveDate: new Date(),
           billStatus: false,
-          amount: 1500,
+          amount: customer.packagePrice || 1500, // Use package price if available
         });
+        logToFile(`✅ Created bill for customer: ${customer.customerName}`);
       }
     }
 
     logToFile("✅ Monthly bills ensured");
-
-    const localCustomers = await Customer.find();
-    const cloudConn = await mongoose.createConnection(
-      'mongodb+srv://ali777:9F1aGSgE1Qdl5OXs@cluster0.hxvs0cu.mongodb.net/ispos?retryWrites=true&w=majority&appName=Cluster0'
-    );
-    logToFile("✅ Connected to MongoDB Atlas");
-
-    const cloudCustomerSchema = new mongoose.Schema({
-      serialNumber: String,
-      customerName: String,
-      phone: String,
-      address: String,
-      cnic: String,
-      expiryDate: Date,
-      billReceiveDate: Date,
-      customerId: String,
-      email: String,
-      billStatus: Boolean,
-      billDate: Date,
-      synced: Boolean,
-      packageName: String,
-      amount: Number,
-      paymentMethod: String,
-      paymentNote: String,
-    });
-
-    const CloudCustomer = cloudConn.model("CloudCustomer", cloudCustomerSchema, "customers");
-
-    let syncedCount = 0;
-    for (const localDoc of localCustomers) {
-      const customerData = { ...localDoc.toObject() };
-      delete customerData._id;
-
-      if (!customerData.packageName) {
-        customerData.packageName = "Basic";
-      }
-
-      try {
-        let cloudDoc = await CloudCustomer.findOne({ serialNumber: customerData.serialNumber });
-
-        if (cloudDoc) {
-          const shouldUpdate = (
-            cloudDoc.billStatus !== customerData.billStatus ||
-            cloudDoc.paymentMethod !== customerData.paymentMethod ||
-            cloudDoc.paymentNote !== customerData.paymentNote
-          );
-
-          if (shouldUpdate) {
-            cloudDoc.set(customerData);
-            await cloudDoc.save();
-            logToFile(`🔄 Updated cloud customer: ${cloudDoc.serialNumber}`);
-          }
-        } else {
-          const newCloudDoc = new CloudCustomer({ ...customerData, synced: true });
-          await newCloudDoc.save();
-          logToFile(`☁️ Created cloud customer: ${customerData.serialNumber}`);
-        }
-
-        if (!localDoc.synced) {
-          localDoc.synced = true;
-          await localDoc.save();
-        }
-
-        syncedCount++;
-      } catch (err) {
-        logToFile(`❌ Error syncing customer ${customerData.serialNumber}: ${err.message}`);
-      }
-    }
-
-    logToFile(`✅ Synced ${syncedCount} customer(s) to MongoDB Atlas`);
-    await cloudConn.close();
   } catch (err) {
-    logToFile(`❌ Sync Error: ${err.message}`);
+    logToFile(`❌ Bill Creation Error: ${err.message}`);
   }
-}
-
-// ========================
-// Background Sync Interval
-// ========================
-function startSyncInterval() {
-  const intervalMinutes = 1;
-  setInterval(() => {
-    logToFile("🔁 Starting background sync...");
-    runCloudSync();
-  }, intervalMinutes * 60 * 1000);
 }
 
 // ========================
@@ -262,7 +181,12 @@ function createMainWindow() {
 app.whenReady().then(() => {
   startBackendServer();
   createMainWindow();
-  startSyncInterval();
+  
+  // Run monthly bill creation on startup
+  createMonthlyBills();
+  
+  // Schedule monthly bill creation to run on the 1st of each month
+  scheduleMonthlyBills();
 });
 
 app.on('window-all-closed', () => {
@@ -272,3 +196,27 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (mainWindow === null) createMainWindow();
 });
+
+// ========================
+// Monthly Bill Scheduling
+// ========================
+function scheduleMonthlyBills() {
+  // Calculate time until next 1st of the month at 00:05 AM
+  const now = new Date();
+  let nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 5, 0);
+  
+  // If we're already past the 1st, run next month
+  if (now.getDate() >= 1) {
+    nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 5, 0);
+  }
+  
+  const timeUntilNext = nextMonth - now;
+  
+  setTimeout(() => {
+    createMonthlyBills();
+    // Schedule recurring monthly execution
+    setInterval(createMonthlyBills, 30 * 24 * 60 * 60 * 1000); // ~30 days
+  }, timeUntilNext);
+  
+  logToFile(`⏰ Next bill creation scheduled for: ${nextMonth.toISOString()}`);
+}

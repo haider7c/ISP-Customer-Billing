@@ -3,7 +3,7 @@ import { useAsyncError, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import Footer from "../Frontcomponents/Footer.jsx";
 import NavBar from "../Frontcomponents/NavBar.jsx";
-import bg2 from "../../../assets/bg1.png";
+import bg2 from "../../../assets/landingbg.png";
 import card1 from "../../../assets/card1.png";
 import card2 from "../../../assets/card2.png";
 import Form from "../Frontcomponents/Form.jsx";

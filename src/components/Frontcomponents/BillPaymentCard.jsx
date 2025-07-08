@@ -196,10 +196,11 @@ const BillPaymentCard = ({
               onClick={() => setShowModal(false)}
               className="absolute top-1 right-1 text-gray-600 hover:text-black"
             >
-              <X size={16} />
+              <X size={16} className="text-black" />
             </button>
             <div className="h-[100%] overflow-auto border">
-              <PDFViewer width={200} height={260} showToolbar={false}>
+                     
+              <PDFViewer width={200} height={260} showToolbar={false}  >
                 <ReceiptPDF customer={selectedCustomer} />
               </PDFViewer>
             </div>
