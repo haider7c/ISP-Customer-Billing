@@ -17,6 +17,7 @@ import Footer from "./components/Frontcomponents/Footer.jsx";
 import PackageManager from "./components/pages/PackageManager.jsx";
 import ManualBill from "./components/pages/ManualBill.jsx";
 import ManualBillViewer from "./components/pages/ManualBillViewer.jsx";
+import WhatsAppManager from "./components/Frontcomponents/WhatsAppManager.jsx";
 
 // Ensure a root element exists in the DOM
 let rootElement = document.getElementById("root");
@@ -44,6 +45,7 @@ root.render(
           <Route path="/packagemanager" element={<PackageManager />} />
           <Route path="/manualbill" element={<ManualBill />} />
           <Route path="/manualBillView" element={<ManualBillViewer />} />
+          <Route path="/whatsappmanager" element={<WhatsAppManager />} />
         </Routes>
         <Footer />
       </Router>

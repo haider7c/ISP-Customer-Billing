@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { fetchCustomers, getBillStatusForMonth } from '../api';
 import BillPaymentCard from './BillPaymentCard.jsx';
-import GoogleSheetReader from './GoogleSheetReader.jsx';
+import { toast } from 'react-toastify';
+import axios from 'axios'; // Add this import
+import 'react-toastify/dist/ReactToastify.css';
 
 const CustomerList = () => {
   const [customers, setCustomers] = useState([]);
@@ -17,6 +19,15 @@ const CustomerList = () => {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Payment receipt modal state
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [paymentData, setPaymentData] = useState({ 
+    amount: '', 
+    method: 'Cash', 
+    transactionId: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  });
 
   // Fetch initial data
   useEffect(() => {
@@ -41,6 +52,7 @@ const CustomerList = () => {
     } catch (error) {
       console.error("Error fetching data:", error);
       setError("Failed to load data. Please try again.");
+      toast.error("Failed to load customer data");
     } finally {
       setLoading(false);
     }
@@ -104,8 +116,88 @@ const CustomerList = () => {
       categorizeCustomers(customers, billStatusData);
     } catch (error) {
       console.error("Error refreshing bill statuses:", error);
+      toast.error("Failed to refresh bill statuses");
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  // Payment receipt functions
+  const openPaymentModal = (customer) => {
+    setSelectedCustomer(customer);
+    setPaymentData({
+      amount: customer.amount || '',
+      method: 'Cash',
+      transactionId: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    });
+    setShowPaymentModal(true);
+  };
+
+  const closePaymentModal = () => {
+    setShowPaymentModal(false);
+    setSelectedCustomer(null);
+    setPaymentData({ 
+      amount: '', 
+      method: 'Cash', 
+      transactionId: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` 
+    });
+  };
+
+  const sendPaymentReceipt = async () => {
+    if (!paymentData.amount || !paymentData.method) {
+      toast.error('Please enter both amount and payment method');
+      return;
+    }
+
+    try {
+      // First update bill status in database
+      await updateBillStatusInDatabase();
+      
+      // Then send WhatsApp receipt
+      const response = await axios.post(
+        `http://localhost:5000/api/whatsapp/send-payment-receipt/${selectedCustomer._id}`,
+        {
+          ...paymentData,
+          customerName: selectedCustomer.customerName,
+          phone: selectedCustomer.phone,
+          packageName: selectedCustomer.packageName,
+          month: selectedMonth,
+          year: selectedYear
+        }
+      );
+      
+      if (response.data.success) {
+        toast.success('Payment receipt sent successfully!');
+        refreshBillStatuses();
+      } else {
+        toast.error(`Failed to send receipt: ${response.data.error}`);
+      }
+      
+      closePaymentModal();
+    } catch (error) {
+      console.error('Error sending payment receipt:', error);
+      toast.error('Error sending payment receipt');
+    }
+  };
+
+  const updateBillStatusInDatabase = async () => {
+    try {
+      const response = await axios.post('http://localhost:5000/api/bill-status/mark-paid', {
+        customerId: selectedCustomer._id,
+        month: selectedMonth,
+        year: selectedYear,
+        transactionId: paymentData.transactionId,
+        paymentAmount: paymentData.amount,
+        paymentMethod: paymentData.method,
+        paymentDate: new Date().toISOString()
+      });
+      
+      if (!response.data.success) {
+        toast.error(`Failed to update bill status: ${response.data.error}`);
+      }
+    } catch (error) {
+      console.error('Error updating bill status:', error);
+      toast.error('Error updating bill status in database');
     }
   };
 
@@ -124,6 +216,77 @@ const CustomerList = () => {
 
   return (
     <div className='flex flex-col'>
+      {/* Payment Receipt Modal */}
+      {showPaymentModal && selectedCustomer && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <h2 className="text-xl font-semibold mb-4">Send Payment Receipt</h2>
+            
+            <div className="mb-4 p-3 bg-gray-50 rounded">
+              <p className="font-medium">{selectedCustomer.customerName}</p>
+              <p className="text-sm text-gray-600">Phone: {selectedCustomer.phone}</p>
+              <p className="text-sm">Package: {selectedCustomer.packageName}</p>
+              <p className="text-sm">Bill Day: {selectedCustomer.billReceiveDate}</p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Amount (Rs.)</label>
+                <input
+                  type="number"
+                  placeholder="Enter amount"
+                  value={paymentData.amount}
+                  onChange={(e) => setPaymentData({...paymentData, amount: e.target.value})}
+                  className="w-full p-2 border rounded"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Payment Method</label>
+                <select
+                  value={paymentData.method}
+                  onChange={(e) => setPaymentData({...paymentData, method: e.target.value})}
+                  className="w-full p-2 border rounded"
+                >
+                  <option value="Cash">Cash</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Card">Card</option>
+                  <option value="JazzCash">JazzCash</option>
+                  <option value="EasyPaisa">EasyPaisa</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Transaction ID</label>
+                <input
+                  type="text"
+                  value={paymentData.transactionId}
+                  onChange={(e) => setPaymentData({...paymentData, transactionId: e.target.value})}
+                  className="w-full p-2 border rounded bg-gray-50"
+                  readOnly
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={sendPaymentReceipt}
+                className="flex-1 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+              >
+                Send Receipt
+              </button>
+              <button
+                onClick={closePaymentModal}
+                className="flex-1 bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rest of your CustomerList JSX remains the same */}
       {/* Search Bar */}
       <div className="mb-6 p-4 bg-gray-50 rounded-lg">
         <div className="relative">
@@ -225,6 +388,7 @@ const CustomerList = () => {
           refreshBillStatuses={refreshBillStatuses}
           searchTerm={searchTerm}
           sectionTitle={`Today's Customers (Day ${selectedDay})`}
+          onSendReceipt={openPaymentModal}
         />
       </div>
 
@@ -249,6 +413,7 @@ const CustomerList = () => {
             refreshBillStatuses={refreshBillStatuses}
             searchTerm={searchTerm}
             sectionTitle={`Pending Customers (Day 1-${selectedDay - 1})`}
+            onSendReceipt={openPaymentModal}
           />
         </div>
       )}
@@ -274,6 +439,7 @@ const CustomerList = () => {
             refreshBillStatuses={refreshBillStatuses}
             searchTerm={searchTerm}
             sectionTitle={`Upcoming Customers (Day ${selectedDay + 1}-31)`}
+            onSendReceipt={openPaymentModal}
           />
         </div>
       )}

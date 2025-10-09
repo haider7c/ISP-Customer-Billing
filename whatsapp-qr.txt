@@ -1,0 +1,3 @@
+Scan this QR code with WhatsApp:
+2@r5DNNaQFuDMaMocqp5pkJfmeGAtd7/5iPHqj6Rlrv7phJFuA8iGXIUGQrdLUnzwHAxnpQgrwX3zmJtMhAB6xDGocGE4CGeMargU=,DtUQ3kgxhqwyErABaMiBM/H/QBabsxuiArcjxUmDSBk=,Fm7HGdrSx+wuTOV8Njq1zbrrKAvT6cHx9YozwMoSplo=,wywvxEPZCxgrcWi+W/Tx0TyYFex7Zgt34NMXEAjoB1M=,1
+Or use this link: https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=2%40r5DNNaQFuDMaMocqp5pkJfmeGAtd7%2F5iPHqj6Rlrv7phJFuA8iGXIUGQrdLUnzwHAxnpQgrwX3zmJtMhAB6xDGocGE4CGeMargU%3D%2CDtUQ3kgxhqwyErABaMiBM%2FH%2FQBabsxuiArcjxUmDSBk%3D%2CFm7HGdrSx%2BwuTOV8Njq1zbrrKAvT6cHx9YozwMoSplo%3D%2CwywvxEPZCxgrcWi%2BW%2FTx0TyYFex7Zgt34NMXEAjoB1M%3D%2C1

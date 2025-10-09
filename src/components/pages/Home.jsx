@@ -7,6 +7,7 @@ import bg2 from "../../../assets/landingbg.png";
 import card1 from "../../../assets/card1.png";
 import card2 from "../../../assets/card2.png";
 import Form from "../Frontcomponents/Form.jsx";
+import WhatsAppManager from "../Frontcomponents/WhatsAppManager.jsx";
 const Home = () => {
   const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
@@ -114,6 +115,27 @@ const Home = () => {
             </div>
           </div>
           {/* button 3  */}
+           <div
+            style={{
+              backgroundImage: `url(${card2})`,
+              backgroundSize: "cover", // Adjust this based on how you want the image to behave
+              // backgroundPosition: "center", // Centers the image
+              height: "250px", // Set a height for the div
+              width: "250px", // Optional width
+            }}
+            className="hover:cursor-pointer"
+            onClick={() => navigate("/whatsappmanager")}
+          >
+            {" "}
+            <div className="flex flex-col items-start ml-5 mt-5">
+              <div className="bg-white px-2 py-1 rounded-sm shadow-md">+</div>
+              <h1 className="text-2xl max-w-32 text-left font-bold mt-8">
+                Manage Customers Whatsapp
+              </h1>
+              <p className="mt-5 text-sm">Manage Via Whatsapp</p>
+            </div>
+          </div>
+          {/* button 4  */}
         </div>
         {/* A Complete Row for Buttons  */}
         <div className="flex gap-10 mt-10">
@@ -184,7 +206,6 @@ const Home = () => {
         </div>
         {/* 2nd Row of Buttons  */}
       </div>
-    
     </div>
   );
 };
