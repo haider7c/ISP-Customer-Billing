@@ -8,7 +8,7 @@ const BASE_URL = "http://localhost:5000";
 
 const Form = ({ initialData = null, onSubmit, onCancel, isSubmitting = false }) => {
   const [serialNumber, setSerialNumber] = useState("");
-  const [date, setDate] = useState("");
+  const [currentDay, setCurrentDay] = useState("");
   const [packages, setPackages] = useState([]);
   const [selectedAmount, setSelectedAmount] = useState("");
   const [loading, setLoading] = useState(true);
@@ -40,13 +40,16 @@ const Form = ({ initialData = null, onSubmit, onCancel, isSubmitting = false }) 
           }
         }
 
-        // Date
-        const response = await axios.get(`${BASE_URL}/api/date`);
-        const fetchedDate = new Date(response.data.date)
-          .toISOString()
-          .split("T")[0];
-        setDate(fetchedDate);
-        if (!initialData) setValue("regDate", fetchedDate);
+        // Get current day of month (1-31)
+        const today = new Date();
+        const dayOfMonth = today.getDate();
+        setCurrentDay(dayOfMonth);
+        
+        // Set billReceiveDate to current day (single digit)
+        if (!initialData) {
+          setValue("billReceiveDate", dayOfMonth.toString());
+          setValue("regDate", today.toISOString().split("T")[0]);
+        }
 
         // Packages
         const res = await axios.get(`${BASE_URL}/api/packages`);
@@ -72,11 +75,24 @@ const Form = ({ initialData = null, onSubmit, onCancel, isSubmitting = false }) 
   }, [selectedPackageId, packages, setValue]);
 
   useEffect(() => {
-    // Populate form in edit mode
+    // Populate form in edit mode - FIXED for billReceiveDate
     if (initialData) {
+      // Convert billReceiveDate from timestamp back to day number
+      let billReceiveDay = initialData.billReceiveDate;
+      
+      // If it's a timestamp, extract the day
+      if (initialData.billReceiveDate && typeof initialData.billReceiveDate === 'string' && initialData.billReceiveDate.includes('T')) {
+        const date = new Date(initialData.billReceiveDate);
+        billReceiveDay = date.getDate().toString();
+      } else if (typeof initialData.billReceiveDate === 'number') {
+        // If it's stored as milliseconds, convert to day
+        const date = new Date(initialData.billReceiveDate);
+        billReceiveDay = date.getDate().toString();
+      }
+      
       const cleanData = {
         ...initialData,
-        billReceiveDate: initialData.billReceiveDate?.split("T")[0],
+        billReceiveDate: billReceiveDay,
         regDate: initialData.regDate?.split("T")[0],
         billDate: initialData.billDate?.split("T")[0],
         activationDate: initialData.activationDate?.split("T")[0],
@@ -87,11 +103,22 @@ const Form = ({ initialData = null, onSubmit, onCancel, isSubmitting = false }) 
 
   const handleFormSubmit = async (data) => {
     const selectedPkg = packages.find((p) => p._id === data.packageId);
+    
+    // Convert billReceiveDate to number and ensure it's between 1-31
+    const billDay = Math.max(1, Math.min(31, parseInt(data.billReceiveDate) || currentDay));
+    
     const payload = {
       ...data,
       billStatus: data.billStatus === "true",
       packageName: selectedPkg?.name || "",
+      // Store as simple number, not Date object
+      billReceiveDate: billDay,
+      amount: selectedPkg?.defaultAmount || data.amount,
     };
+
+    // Remove any Date objects that might be created
+    delete payload.billDate;
+    delete payload.regDate;
 
     // Edit mode
     if (initialData && onSubmit) {
@@ -103,7 +130,9 @@ const Form = ({ initialData = null, onSubmit, onCancel, isSubmitting = false }) 
       const fullPayload = {
         ...payload,
         serialNumber,
-        billDate: new Date(),
+        // Add dates as ISO strings separately
+        billDate: new Date().toISOString(),
+        regDate: new Date(data.regDate).toISOString(),
       };
 
       await createCustomer(fullPayload);
@@ -121,13 +150,12 @@ const Form = ({ initialData = null, onSubmit, onCancel, isSubmitting = false }) 
         cnic: "",
         packageId: "",
         email: "",
-        billReceiveDate: "",
-        regDate: date,
+        billReceiveDate: currentDay.toString(), // Reset to current day
+        regDate: new Date().toISOString().split("T")[0],
         customerId: "",
       });
 
       setSelectedAmount("");
-      setValue("regsDate", date);
     } catch (err) {
       console.error(err);
       alert("Error submitting form");
@@ -303,14 +331,33 @@ const Form = ({ initialData = null, onSubmit, onCancel, isSubmitting = false }) 
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">
-              Bill Receive Date
+              Bill Day (1-31) <span className="text-red-500">*</span>
             </label>
             <input
-              {...register("billReceiveDate")}
-              type="date"
+              {...register("billReceiveDate", { 
+                required: "Bill day is required",
+                min: { value: 1, message: "Minimum day is 1" },
+                max: { value: 31, message: "Maximum day is 31" },
+                pattern: {
+                  value: /^(3[0-1]|[12][0-9]|[1-9])$/,
+                  message: "Enter a valid day (1-31)"
+                }
+              })}
+              type="number"
+              min="1"
+              max="31"
+              placeholder={`e.g., ${currentDay}`}
               className="mt-1 p-2 w-full border rounded"
               disabled={isSubmitting}
             />
+            {errors.billReceiveDate && (
+              <p className="text-red-500 text-sm mt-1">
+                {errors.billReceiveDate.message}
+              </p>
+            )}
+            <p className="text-xs text-gray-500 mt-1">
+              Day of month when bill should be received (1-31)
+            </p>
           </div>
 
           <div>

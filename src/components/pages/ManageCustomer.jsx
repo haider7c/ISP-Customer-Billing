@@ -38,7 +38,7 @@ const ManageCustomer = () => {
       setSelectedCustomer(null);
     } catch (err) {
       console.error("Error deleting customer:", err);
-      alert("Failed to delete customer. Please try again.");
+      // alert("Failed to delete customer. Please try again.");
     } finally {
       setIsDeleting(false);
     }
@@ -47,21 +47,56 @@ const ManageCustomer = () => {
   const handleUpdate = async (updatedCustomer) => {
     try {
       setIsUpdating(true);
+      
+      // Prepare the payload with proper billReceiveDate handling
+      const payload = {
+        ...updatedCustomer,
+        // Ensure billReceiveDate is stored as number
+        billReceiveDate: parseInt(updatedCustomer.billReceiveDate) || new Date().getDate(),
+      };
+      
       const res = await axios.put(
         `http://localhost:5000/api/customers/${updatedCustomer._id}`,
-        updatedCustomer
+        payload
       );
-      setCustomers((prev) =>
-        prev.map((c) => (c._id === updatedCustomer._id ? res.data : c))
+      
+      // Update both the customers list and selected customer
+      const updatedCustomers = customers.map((c) => 
+        c._id === updatedCustomer._id ? res.data : c
       );
+      
+      setCustomers(updatedCustomers);
       setSelectedCustomer(res.data);
       setEditMode(false);
+      
+      // Show success message
+      // alert("Customer updated successfully!");
+      
     } catch (err) {
       console.error("Error updating customer:", err);
-      alert("Failed to update customer. Please try again.");
+      // alert("Failed to update customer. Please try again.");
     } finally {
       setIsUpdating(false);
     }
+  };
+
+  // Helper function to extract bill day from various formats
+  const getBillDay = (customer) => {
+    if (!customer.billReceiveDate) return "N/A";
+    
+    let billDay = customer.billReceiveDate;
+    
+    // If it's stored as timestamp, extract the day
+    if (typeof customer.billReceiveDate === 'string' && customer.billReceiveDate.includes('T')) {
+      const date = new Date(customer.billReceiveDate);
+      billDay = date.getDate();
+    } else if (typeof customer.billReceiveDate === 'number' && customer.billReceiveDate > 31) {
+      // If it's stored as milliseconds, convert to day
+      const date = new Date(customer.billReceiveDate);
+      billDay = date.getDate();
+    }
+    
+    return billDay;
   };
 
   const filteredCustomers = customers.filter((customer) =>
@@ -77,15 +112,32 @@ const ManageCustomer = () => {
     return isNaN(date) ? "Invalid Date" : date.toLocaleDateString();
   };
 
+  // Refresh the customer list
+  const refreshCustomerList = () => {
+    fetchCustomers();
+  };
+
   return (
     <div className="flex max-w-7xl mx-auto h-[80vh] border rounded shadow">
       {/* Left Side - Customer List */}
       <div className="w-1/2 overflow-y-auto border-r p-4">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-bold">📋 All Customers</h2>
-          <span className="text-sm text-gray-500">
-            {filteredCustomers.length} customers
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">
+              {filteredCustomers.length} customers
+            </span>
+            <button
+              onClick={refreshCustomerList}
+              className="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm flex items-center gap-1"
+              title="Refresh list"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh
+            </button>
+          </div>
         </div>
 
         {/* Search Bar */}
@@ -100,6 +152,7 @@ const ManageCustomer = () => {
             <option value="cnic">CNIC</option>
             <option value="packageName">Package</option>
             <option value="phone">Phone</option>
+            <option value="billReceiveDate">Bill Day</option>
           </select>
 
           <input
@@ -155,15 +208,20 @@ const ManageCustomer = () => {
                       {customer.customerId}
                     </p>
                   </div>
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs ${
-                      customer.billStatus
-                        ? "bg-green-100 text-green-800"
-                        : "bg-red-100 text-red-800"
-                    }`}
-                  >
-                    {customer.billStatus ? "Paid" : "Unpaid"}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs ${
+                        customer.billStatus
+                          ? "bg-green-100 text-green-800"
+                          : "bg-red-100 text-red-800"
+                      }`}
+                    >
+                      {customer.billStatus ? "Paid" : "Unpaid"}
+                    </span>
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                      Day {getBillDay(customer)}
+                    </span>
+                  </div>
                 </div>
                 <div className="mt-2 flex text-sm text-gray-500">
                   <span className="mr-3">📱 {customer.phone}</span>
@@ -251,9 +309,9 @@ const ManageCustomer = () => {
                     </p>
                   </div>
                   <div>
-                    <label className="text-gray-500">Payment Method</label>
+                    <label className="text-gray-500">Bill Day</label>
                     <p className="font-medium">
-                      {selectedCustomer.paymentMethod || "N/A"}
+                      Day {getBillDay(selectedCustomer)}
                     </p>
                   </div>
                 </div>
@@ -262,16 +320,16 @@ const ManageCustomer = () => {
               <div className="mt-6 space-y-4">
                 <div>
                   <label className="text-gray-500">Address</label>
-                  <p className="font-medium mt-1">
-                    {selectedCustomer.address || "N/A"}
-                  </p>
+                    <p className="font-medium mt-1">
+                      {selectedCustomer.address || "N/A"}
+                    </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-gray-500">Bill Receive Date</label>
+                    <label className="text-gray-500">Registration Date</label>
                     <p className="font-medium">
-                      {formatDate(selectedCustomer.billReceiveDate)}
+                      {formatDate(selectedCustomer.regDate)}
                     </p>
                   </div>
                   <div>
@@ -290,6 +348,23 @@ const ManageCustomer = () => {
                     </p>
                   </div>
                 )}
+              </div>
+
+              {/* Additional Info Section */}
+              <div className="mt-6 p-4 bg-gray-50 rounded">
+                <h3 className="font-semibold text-gray-700 mb-2">Billing Information</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <label className="text-gray-500">Serial Number</label>
+                    <p className="font-medium">{selectedCustomer.serialNumber}</p>
+                  </div>
+                  <div>
+                    <label className="text-gray-500">Created</label>
+                    <p className="font-medium">
+                      {formatDate(selectedCustomer.createdAt)}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )

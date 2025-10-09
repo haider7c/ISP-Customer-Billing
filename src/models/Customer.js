@@ -29,7 +29,7 @@ const customerSchema = new mongoose.Schema(
 
     // ✅ Renamed field here
     billReceiveDate: {
-      type: Date,
+      type: Number,
       required: true,
     },
 
