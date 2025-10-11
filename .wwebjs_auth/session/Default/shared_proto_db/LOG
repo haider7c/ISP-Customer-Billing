@@ -1,2 +1,3 @@
-2025/10/09-22:25:45.189 1af8 Creating DB C:\Users\haide\Desktop\ISP-Customer-Billing\.wwebjs_auth\session\Default\shared_proto_db since it was missing.
-2025/10/09-22:25:45.196 1af8 Reusing MANIFEST C:\Users\haide\Desktop\ISP-Customer-Billing\.wwebjs_auth\session\Default\shared_proto_db/MANIFEST-000001
+2025/10/11-15:49:05.428 1794 Reusing MANIFEST C:\Users\haide\Desktop\ISP-Customer-Billing\.wwebjs_auth\session\Default\shared_proto_db/MANIFEST-000001
+2025/10/11-15:49:05.429 1794 Recovering log #3
+2025/10/11-15:49:05.430 1794 Reusing old log C:\Users\haide\Desktop\ISP-Customer-Billing\.wwebjs_auth\session\Default\shared_proto_db/000003.log 
