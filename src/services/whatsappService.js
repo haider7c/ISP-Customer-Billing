@@ -5,51 +5,130 @@ const path = require('path');
 const fs = require('fs');
 
 class WhatsAppService {
-  constructor() {
+  constructor(mainWindow) {
     this.client = null;
     this.isReady = false;
+    this.mainWindow = mainWindow;
     this.sessionFile = path.join(__dirname, '../../whatsapp-session.json');
+    this.currentQR = null;
+    
+    // Store the main window reference for event forwarding
+    this.mainWindowRef = mainWindow;
+    
     this.init();
   }
 
   init() {
     try {
+      console.log('🔄 Initializing WhatsApp client...');
+      
       this.client = new Client({
-        authStrategy: new LocalAuth(),
+        authStrategy: new LocalAuth({
+          clientId: "whatsapp-client"
+        }),
         puppeteer: {
           headless: true,
-          args: ['--no-sandbox', '--disable-setuid-sandbox']
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
         }
       });
 
       this.client.on('qr', (qr) => {
-        console.log('📱 WhatsApp QR Code received:');
+        console.log('📱 WhatsApp QR Code received');
+        this.currentQR = qr;
+        
+        // Send QR code to main window (which will forward to QR window)
+        if (this.mainWindowRef && !this.mainWindowRef.isDestroyed()) {
+          console.log('Sending QR code to main window for forwarding...');
+          this.mainWindowRef.webContents.send('whatsapp-qr', qr);
+        } else {
+          console.log('Main window not available for QR code forwarding');
+        }
+        
+        // Also generate terminal QR as fallback
         qrcode.generate(qr, { small: true });
         
         // Save QR code to file for easy access
         const qrFile = path.join(__dirname, '../../whatsapp-qr.txt');
-        fs.writeFileSync(qrFile, `Scan this QR code with WhatsApp:\n${qr}\nOr use this link: https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qr)}`);
+        fs.writeFileSync(qrFile, `Scan this QR code with WhatsApp:\n${qr}\nGenerated at: ${new Date().toISOString()}`);
+        console.log(`💾 QR code saved to: ${qrFile}`);
+      });
+
+      this.client.on('qr', (qr) => {
+        console.log('📱 WhatsApp QR Code received');
+        this.currentQR = qr;
+        
+        // Send QR code to frontend
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          console.log('Sending QR code to frontend...');
+          this.mainWindow.webContents.send('whatsapp-qr', qr);
+        } else {
+          console.log('Main window not available for QR code');
+        }
+        
+        // Also generate terminal QR as fallback
+        qrcode.generate(qr, { small: true });
+        
+        // Save QR code to file for easy access
+        const qrFile = path.join(__dirname, '../../whatsapp-qr.txt');
+        fs.writeFileSync(qrFile, `Scan this QR code with WhatsApp:\n${qr}\nGenerated at: ${new Date().toISOString()}`);
         console.log(`💾 QR code saved to: ${qrFile}`);
       });
 
       this.client.on('ready', () => {
         console.log('✅ WhatsApp client is ready!');
         this.isReady = true;
+        
+        // Notify frontend
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('whatsapp-status', {
+            isReady: true,
+            isConnected: true
+          });
+        }
       });
 
       this.client.on('auth_failure', (msg) => {
         console.error('❌ WhatsApp authentication failed:', msg);
         this.isReady = false;
+        
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('whatsapp-status', {
+            isReady: false,
+            isConnected: false,
+            error: msg
+          });
+        }
       });
 
       this.client.on('disconnected', (reason) => {
         console.log('❌ WhatsApp client disconnected:', reason);
         this.isReady = false;
+        
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('whatsapp-status', {
+            isReady: false,
+            isConnected: false,
+            error: reason
+          });
+        }
+        
         // Attempt to reconnect after 5 seconds
-        setTimeout(() => this.init(), 5000);
+        setTimeout(() => {
+          console.log('🔄 Attempting to reconnect WhatsApp...');
+          this.init();
+        }, 5000);
       });
 
-      this.client.initialize();
+      this.client.on('loading_screen', (percent, message) => {
+        console.log(`📱 WhatsApp Loading: ${percent}% ${message}`);
+      });
+
+      this.client.initialize().then(() => {
+        console.log('✅ WhatsApp client initialization started');
+      }).catch(error => {
+        console.error('❌ WhatsApp client initialization failed:', error);
+      });
+
     } catch (error) {
       console.error('❌ Failed to initialize WhatsApp client:', error);
     }
@@ -274,11 +353,43 @@ Your ISP Team 🌐`;
   getStatus() {
     return {
       isReady: this.isReady,
-      isConnected: this.isReady
+      isConnected: this.isReady,
+      hasQR: !!this.currentQR
     };
   }
-}
 
-// Create singleton instance
-const whatsappService = new WhatsAppService();
-module.exports = whatsappService;
+  // Get current QR code
+  getCurrentQR() {
+    return this.currentQR;
+  }
+
+  // Force QR code regeneration
+  async regenerateQR() {
+    if (this.client) {
+      try {
+        await this.client.logout();
+        await this.client.destroy();
+        this.isReady = false;
+        this.currentQR = null;
+        this.init();
+        return { success: true, message: 'QR code regeneration initiated' };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }
+    return { success: false, error: 'Client not initialized' };
+  }
+}
+// Export factory function with proper singleton pattern
+let whatsappServiceInstance = null;
+
+
+module.exports = (mainWindow) => {
+  if (!whatsappServiceInstance) {
+    whatsappServiceInstance = new WhatsAppService(mainWindow);
+  } else if (mainWindow && !whatsappServiceInstance.mainWindowRef) {
+    // Update main window reference if needed
+    whatsappServiceInstance.mainWindowRef = mainWindow;
+  }
+  return whatsappServiceInstance;
+};

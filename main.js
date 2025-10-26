@@ -3,7 +3,7 @@
 // ========================
 const path = require('path');
 const url = require('url');
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const express = require("express");
 const mongoose = require("mongoose");
 const bodyParser = require("body-parser");
@@ -34,7 +34,282 @@ function logToFile(msg) {
 const CLOUD_MONGO_URI = 'mongodb+srv://ali777:LsocA2ih5dDHa7av@cluster0.hxvs0cu.mongodb.net/ispos?retryWrites=true&w=majority&appName=Cluster0';
 const PORT = 5000;
 let mainWindow;
+let whatsappService;
 
+// ========================
+// QR Code Window Setup
+// ========================
+let qrWindow = null;
+
+function createQRWindow() {
+  if (qrWindow && !qrWindow.isDestroyed()) {
+    qrWindow.focus();
+    return;
+  }
+
+  qrWindow = new BrowserWindow({
+    width: 450,
+    height: 600,
+    show: false,
+    title: 'WhatsApp QR Code',
+    parent: mainWindow,
+    modal: true,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      enableRemoteModule: true,
+    },
+  });
+
+  // Create QR HTML content with embedded QR code library
+ // Create QR HTML content with proper QR code library
+const qrHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WhatsApp QR Code</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background: #f5f5f5;
+            margin: 0;
+        }
+        .container {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        #qrcode {
+            margin: 20px auto;
+            padding: 15px;
+            background: white;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            min-height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .instructions {
+            text-align: left;
+            margin: 20px 0;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 12px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .connected { background: #e8f5e8; color: #2e7d32; }
+        .disconnected { background: #ffebee; color: #c62828; }
+        .scanning { background: #fff3e0; color: #ef6c00; }
+        button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #005a9e;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+        .qr-text {
+            font-family: monospace;
+            font-size: 8px;
+            word-break: break-all;
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        .error {
+            color: #d32f2f;
+            background: #ffebee;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>📱 WhatsApp Authentication</h2>
+        
+        <div id="status" class="status scanning">
+            ⏳ Waiting for QR Code...
+        </div>
+
+        <div id="qrcode">
+            <div class="loading">QR code will appear here...</div>
+        </div>
+
+        <div class="instructions">
+            <h3 style="margin-top: 0;">How to connect:</h3>
+            <ol>
+                <li>Open WhatsApp on your phone</li>
+                <li>Tap <strong>Menu</strong> → <strong>Linked Devices</strong></li>
+                <li>Tap <strong>Link a Device</strong></li>
+                <li>Scan the QR code above</li>
+            </ol>
+            <p><strong>Note:</strong> This window will close automatically once connected.</p>
+        </div>
+
+        <button id="closeBtn">Close Window</button>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+        const QRCode = require('qrcode');
+        
+        console.log('QR Window script loaded with QRCode module');
+        
+        // Listen for QR code from main process
+        ipcRenderer.on('whatsapp-qr', async (event, qrCode) => {
+            console.log('QR Window: Received QR code data');
+            const qrcodeElement = document.getElementById('qrcode');
+            const statusElement = document.getElementById('status');
+            
+            statusElement.innerHTML = '📱 Scan this QR code with WhatsApp';
+            statusElement.className = 'status scanning';
+            
+            try {
+                console.log('Generating QR code image...');
+                
+                // Generate QR code as data URL
+                const qrImage = await QRCode.toDataURL(qrCode, {
+                    width: 280,
+                    height: 280,
+                    margin: 2,
+                    color: {
+                        dark: '#000000',
+                        light: '#FFFFFF'
+                    }
+                });
+                
+                console.log('QR code image generated successfully');
+                qrcodeElement.innerHTML = '<img src="' + qrImage + '" alt="WhatsApp QR Code">';
+                
+            } catch (error) {
+                console.error('QR Window: Failed to generate QR image:', error);
+                
+                // Fallback to text representation
+                const qrText = qrCode.substring(0, 100) + '...';
+                qrcodeElement.innerHTML = \`
+                    <div style="text-align: center;">
+                        <div class="error">
+                            <strong>QR Image Generation Failed</strong>
+                            <p>Using text representation instead</p>
+                        </div>
+                        <h4>WhatsApp QR Code Data</h4>
+                        <div class="qr-text">
+                            \${qrText}
+                        </div>
+                        <p><strong>Full QR code is available in terminal</strong></p>
+                        <p>Scan the terminal QR code with WhatsApp → Linked Devices</p>
+                    </div>
+                \`;
+            }
+        });
+
+        // Listen for connection status
+        ipcRenderer.on('whatsapp-status', (event, status) => {
+            console.log('QR Window: Status update received:', status);
+            const statusElement = document.getElementById('status');
+            
+            if (status.isReady) {
+                statusElement.innerHTML = '✅ Connected to WhatsApp!';
+                statusElement.className = 'status connected';
+                
+                // Auto-close after 3 seconds
+                setTimeout(() => {
+                    window.close();
+                }, 3000);
+            } else if (status.error) {
+                statusElement.innerHTML = '❌ Error: ' + status.error;
+                statusElement.className = 'status disconnected';
+            } else {
+                statusElement.innerHTML = '❌ Disconnected from WhatsApp';
+                statusElement.className = 'status disconnected';
+            }
+        });
+
+        // Close button
+        document.getElementById('closeBtn').addEventListener('click', () => {
+            window.close();
+        });
+
+        // Request current status when window loads
+        console.log('QR Window: Requesting initial status');
+        ipcRenderer.send('qr-window-ready');
+        
+        console.log('QR Window: Setup complete');
+    </script>
+</body>
+</html>`;
+
+  qrWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(qrHTML)}`);
+
+  qrWindow.once('ready-to-show', () => {
+    qrWindow.show();
+    console.log('QR Window shown');
+    
+    // Send current QR code if available
+    if (whatsappService && whatsappService.currentQR) {
+      console.log('Sending existing QR code to new window');
+      qrWindow.webContents.send('whatsapp-qr', whatsappService.currentQR);
+    }
+  });
+
+  qrWindow.on('closed', () => {
+    console.log('QR Window closed');
+    qrWindow = null;
+  });
+
+  // Handle window errors
+  qrWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('QR Window failed to load:', errorDescription);
+  });
+
+  // Listen for messages from QR window
+  qrWindow.webContents.on('ipc-message', (event, channel, data) => {
+    if (channel === 'qr-window-ready') {
+      console.log('QR Window is ready and requesting data');
+      // Send current status and QR if available
+      if (whatsappService) {
+        const status = whatsappService.getStatus();
+        qrWindow.webContents.send('whatsapp-status', status);
+        
+        if (whatsappService.currentQR) {
+          setTimeout(() => {
+            qrWindow.webContents.send('whatsapp-qr', whatsappService.currentQR);
+          }, 500);
+        }
+      }
+    }
+  });
+}
 async function connectToDatabase() {
   try {
     console.log("🔄 Attempting to connect to MongoDB...");
@@ -79,7 +354,7 @@ async function connectToDatabase() {
   }
 }
 
-function startBackendServer() {
+function startBackendServer(mainWindow) {
   const backendApp = express();
 
   // Connect to cloud MongoDB with retry logic
@@ -107,23 +382,41 @@ function startBackendServer() {
     next();
   });
 
-  // Load WhatsApp routes only if files exist
-  try {
-    const whatsappRoutes = require("./src/routes/whatsappRoutes");
-    backendApp.use("/api/whatsapp", whatsappRoutes);
-    console.log("✅ WhatsApp routes loaded");
-    logToFile("✅ WhatsApp routes loaded");
-  } catch (error) {
-    console.log("⚠️ WhatsApp routes not found, continuing without WhatsApp features");
-    logToFile("⚠️ WhatsApp routes not found");
-  }
-
+  // Load all routes first
   backendApp.use('/api/customers', customerRoutes);
   backendApp.use("/api/serialNumber", serialNumberRoute);
   backendApp.use("/api/bills", billRoutes);
   backendApp.use("/api/packages", packageRoutes);
   backendApp.use("/api/manualBill", manualBill);
   backendApp.use("/api/billStatus", billStatusRoutes);
+
+  // Load WhatsApp routes with better error handling
+  try {
+    const whatsappRoutes = require("./src/routes/whatsappRoutes");
+    backendApp.use("/api/whatsapp", whatsappRoutes);
+    console.log("✅ WhatsApp routes loaded successfully");
+    logToFile("✅ WhatsApp routes loaded successfully");
+  } catch (error) {
+    console.log("⚠️ WhatsApp routes not found, creating fallback routes");
+    logToFile("⚠️ WhatsApp routes not found");
+    
+    // Create basic fallback routes
+    backendApp.get("/api/whatsapp/status", (req, res) => {
+      res.json({ isReady: false, isConnected: false });
+    });
+    
+    backendApp.get("/api/whatsapp/expiring-packages", (req, res) => {
+      res.json([]);
+    });
+    
+    backendApp.get("/api/whatsapp/due-today", (req, res) => {
+      res.json([]);
+    });
+    
+    backendApp.post("/api/whatsapp/send-test", (req, res) => {
+      res.json({ success: false, error: "WhatsApp service not available" });
+    });
+  }
 
   // Health check endpoint
   backendApp.get("/api/health", (req, res) => {
@@ -164,6 +457,86 @@ function startBackendServer() {
     logToFile(`🚀 Backend server running at http://localhost:${PORT}`);
   });
 
+  // Initialize WhatsApp service AFTER server starts
+// Initialize WhatsApp service AFTER server starts
+setTimeout(() => {
+  try {
+    console.log('🔄 Initializing WhatsApp service...');
+    
+    const createWhatsAppService = require("./src/services/whatsappService");
+    whatsappService = createWhatsAppService(mainWindow);
+    console.log("✅ WhatsApp service initialized with frontend integration");
+    logToFile("✅ WhatsApp service initialized with frontend integration");
+    
+    // Setup QR code forwarding to any open QR windows
+    if (whatsappService.client) {
+      whatsappService.client.on('qr', (qr) => {
+        console.log('📱 QR Code generated, forwarding to QR window...');
+        if (qrWindow && !qrWindow.isDestroyed()) {
+          setTimeout(() => {
+            qrWindow.webContents.send('whatsapp-qr', qr);
+            console.log('✅ QR code sent to QR window');
+          }, 1000);
+        }
+      });
+      
+      whatsappService.client.on('ready', () => {
+        console.log('✅ WhatsApp ready, notifying QR window...');
+        if (qrWindow && !qrWindow.isDestroyed()) {
+          qrWindow.webContents.send('whatsapp-status', {
+            isReady: true,
+            isConnected: true
+          });
+        }
+      });
+    }
+  } catch (error) {
+    console.log("⚠️ WhatsApp service not available: " + error.message);
+    logToFile("⚠️ WhatsApp service not available: " + error.message);
+    console.log("Error stack:", error.stack);
+  }
+}, 3000);
+  // Add IPC handlers for WhatsApp
+  ipcMain.handle('get-whatsapp-status', () => {
+    return whatsappService ? whatsappService.getStatus() : { isReady: false, isConnected: false };
+  });
+
+  ipcMain.handle('open-qr-window', () => {
+    createQRWindow();
+  });
+
+  ipcMain.handle('restart-whatsapp', () => {
+    if (whatsappService) {
+      whatsappService.init();
+      return { success: true };
+    }
+    return { success: false, error: 'WhatsApp service not available' };
+  });
+  // Handle QR window ready event
+ipcMain.on('qr-window-ready', (event) => {
+  console.log('QR window is ready, sending current data...');
+  
+  // Send current status
+  if (whatsappService) {
+    const status = whatsappService.getStatus();
+    event.reply('whatsapp-status', status);
+    
+    // Send current QR code if available
+    if (whatsappService.currentQR) {
+      setTimeout(() => {
+        event.reply('whatsapp-qr', whatsappService.currentQR);
+      }, 500);
+    }
+  }
+});
+
+  ipcMain.handle('regenerate-qr', async () => {
+  if (whatsappService) {
+    const result = await whatsappService.regenerateQR();
+    return result;
+  }
+  return { success: false, error: 'WhatsApp service not available' };
+});
   // Start WhatsApp service after a delay
   setTimeout(() => {
     try {
@@ -175,8 +548,21 @@ function startBackendServer() {
       console.log("⚠️ WhatsApp services not available");
       logToFile("⚠️ WhatsApp services not available");
     }
-  }, 15000);
+  }, 5000);
 }
+
+// Debug: Check WhatsApp service status every 5 seconds
+setInterval(() => {
+  if (whatsappService) {
+    console.log('WhatsApp Service Status:', {
+      isReady: whatsappService.isReady,
+      hasQR: !!whatsappService.currentQR,
+      clientInitialized: !!whatsappService.client
+    });
+  } else {
+    console.log('WhatsApp Service: NOT INITIALIZED');
+  }
+}, 5000);
 
 // ========================
 // Monthly Bill Creation
@@ -239,6 +625,7 @@ function createMainWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
+      enableRemoteModule: true,
     },
   });
 
@@ -290,8 +677,8 @@ app.whenReady().then(() => {
   console.log("🚀 Starting ISP Customer Billing System...");
   logToFile("🚀 Starting ISP Customer Billing System...");
   
-  startBackendServer();
   createMainWindow();
+  startBackendServer(mainWindow);
   
   // Schedule monthly bill creation to run on the 1st of each month
   scheduleMonthlyBills();

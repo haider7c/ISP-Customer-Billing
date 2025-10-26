@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { toast } from 'react-toastify'; // Add toast
-import 'react-toastify/dist/ReactToastify.css';
+import { toast } from 'react-toastify';
 
 const WhatsAppManager = () => {
   const [status, setStatus] = useState({});
@@ -10,8 +9,6 @@ const WhatsAppManager = () => {
   const [loading, setLoading] = useState(false);
   const [testMessage, setTestMessage] = useState({ phone: '', message: '' });
   const [activeTab, setActiveTab] = useState('status');
-  
-  // New state for payment receipt modal
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [paymentData, setPaymentData] = useState({ 
@@ -20,21 +17,77 @@ const WhatsAppManager = () => {
     transactionId: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
   });
 
+   // Add Electron IPC communication
+  const { ipcRenderer } = window.require ? window.require('electron') : {};
+
   useEffect(() => {
     fetchStatus();
     fetchExpiringPackages();
     fetchDueTodayPackages();
+    setupWhatsAppListeners();
   }, []);
+
+   const setupWhatsAppListeners = () => {
+  if (!ipcRenderer) {
+    console.log('IPC Renderer not available');
+    return;
+  }
+
+  console.log('Setting up WhatsApp listeners...');
+  
+  // Listen for QR code updates
+  ipcRenderer.on('whatsapp-qr', (event, qrCode) => {
+    console.log('Frontend: Received QR code notification');
+    toast.info('WhatsApp QR Code received! Check the QR window.');
+  });
+
+  // Listen for status updates
+  ipcRenderer.on('whatsapp-status', (event, newStatus) => {
+    console.log('Frontend: Received status update:', newStatus);
+    setStatus(newStatus);
+    if (newStatus.isConnected) {
+      toast.success('✅ Connected to WhatsApp!');
+    }
+  });
+};
 
   const fetchStatus = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/whatsapp/status');
-      setStatus(response.data);
+      if (ipcRenderer) {
+        const whatsappStatus = await ipcRenderer.invoke('get-whatsapp-status');
+        setStatus(whatsappStatus);
+      } else {
+        // Fallback to HTTP API
+        const response = await axios.get('http://localhost:5000/api/whatsapp/status');
+        setStatus(response.data);
+      }
     } catch (error) {
       console.error('Error fetching status:', error);
       toast.error('Error fetching WhatsApp status');
     }
   };
+
+  const openQRWindow = () => {
+    if (ipcRenderer) {
+      ipcRenderer.invoke('open-qr-window');
+    } else {
+      toast.warning('QR window feature requires Electron environment');
+    }
+  };
+
+  const restartWhatsApp = async () => {
+    if (ipcRenderer) {
+      const result = await ipcRenderer.invoke('restart-whatsapp');
+      if (result.success) {
+        toast.info('🔄 Restarting WhatsApp service...');
+      } else {
+        toast.error('Failed to restart WhatsApp service');
+      }
+    } else {
+      toast.warning('Restart feature requires Electron environment');
+    }
+  };
+
 
   const fetchExpiringPackages = async () => {
     try {
@@ -176,11 +229,71 @@ const WhatsAppManager = () => {
       toast.error('Error updating bill status in database');
     }
   };
+  const regenerateQR = async () => {
+  if (ipcRenderer) {
+    const result = await ipcRenderer.invoke('regenerate-qr');
+    if (result.success) {
+      toast.info('🔄 Regenerating QR code...');
+    } else {
+      toast.error('Failed to regenerate QR: ' + result.error);
+    }
+  } else {
+    toast.warning('Regenerate feature requires Electron environment');
+  }
+};
 
-  return (
+   return (
     <div className="p-6 max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">📱 WhatsApp Billing Manager</h1>
 
+      {/* Enhanced Status Section */}
+      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h2 className="text-xl font-semibold mb-4">WhatsApp Connection</h2>
+        
+        <div className="flex items-center gap-4 mb-4">
+          <div className={`w-4 h-4 rounded-full ${status.isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+          <span className={status.isConnected ? 'text-green-600 font-semibold' : 'text-red-600'}>
+            {status.isConnected ? '✅ Connected to WhatsApp' : '❌ Disconnected from WhatsApp'}
+          </span>
+        </div>
+
+        <div className="flex gap-3 flex-wrap">
+          <button 
+            onClick={openQRWindow}
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 flex items-center gap-2"
+          >
+            <span>📱</span> Show QR Code
+          </button>
+          <button 
+  onClick={regenerateQR}
+  className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 flex items-center gap-2"
+>
+  <span>🔄</span> Regenerate QR
+</button>
+          
+          <button 
+            onClick={restartWhatsApp}
+            className="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 flex items-center gap-2"
+          >
+            <span>🔄</span> Restart Service
+          </button>
+          
+          <button 
+            onClick={fetchStatus}
+            className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 flex items-center gap-2"
+          >
+            <span>🔄</span> Refresh Status
+          </button>
+        </div>
+
+        {!status.isConnected && (
+          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+            <p className="text-yellow-800 text-sm">
+              <strong>To connect WhatsApp:</strong> Click "Show QR Code" and scan the QR code with your WhatsApp mobile app.
+            </p>
+          </div>
+        )}
+      </div>
       {/* Payment Receipt Modal */}
       {showPaymentModal && selectedCustomer && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
