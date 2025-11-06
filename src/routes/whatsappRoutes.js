@@ -5,12 +5,25 @@ const Customer = require("../models/Customer");
 // Get WhatsApp service instance
 function getWhatsAppService() {
   try {
-    // Use require inside function to avoid circular dependencies
     const createWhatsAppService = require("../services/whatsappService");
-    // Get the singleton instance
     return createWhatsAppService();
   } catch (error) {
     console.error('Error getting WhatsApp service:', error);
+    return null;
+  }
+}
+
+// Get Expiry Checker instance
+function getExpiryChecker() {
+  try {
+    const expiryChecker = require("../services/expiryChecker");
+    const whatsappService = getWhatsAppService();
+    if (whatsappService) {
+      expiryChecker.setWhatsAppService(whatsappService);
+    }
+    return expiryChecker;
+  } catch (error) {
+    console.error('Error getting expiry checker:', error);
     return null;
   }
 }
@@ -199,16 +212,11 @@ router.post("/send-payment-receipt/:customerId", async (req, res) => {
 // Get expiring packages
 router.get("/expiring-packages", async (req, res) => {
   try {
+    const expiryChecker = getExpiryChecker();
     const { days = 3 } = req.query;
-    const today = new Date();
-    const targetDate = new Date(today);
-    targetDate.setDate(today.getDate() + parseInt(days));
-
-    const customers = await Customer.find({
-      billReceiveDate: { $lte: targetDate.getDate() },
-    });
-
-    res.json(customers);
+    
+    const packages = await expiryChecker.getExpiringPackages(parseInt(days));
+    res.json(packages);
   } catch (error) {
     console.error('Get expiring packages error:', error);
     res.status(500).json({ error: error.message });
@@ -218,14 +226,9 @@ router.get("/expiring-packages", async (req, res) => {
 // Get packages due today
 router.get("/due-today", async (req, res) => {
   try {
-    const today = new Date();
-    const todayDay = today.getDate();
-
-    const customers = await Customer.find({
-      billReceiveDate: todayDay,
-    });
-
-    res.json(customers);
+    const expiryChecker = getExpiryChecker();
+    const packages = await expiryChecker.getDueTodayPackages();
+    res.json(packages);
   } catch (error) {
     console.error('Get due today error:', error);
     res.status(500).json({ error: error.message });
@@ -235,7 +238,15 @@ router.get("/due-today", async (req, res) => {
 // Run manual expiry check
 router.post("/check-expiring", async (req, res) => {
   try {
-    const expiryChecker = require("../services/expiryChecker");
+    const expiryChecker = getExpiryChecker();
+    
+    if (!expiryChecker) {
+      return res.status(503).json({
+        success: false,
+        error: "Expiry checker not available"
+      });
+    }
+
     const results = await expiryChecker.checkExpiringPackages();
     
     res.json({
@@ -259,7 +270,15 @@ router.post("/check-expiring", async (req, res) => {
 // Run manual due today check
 router.post("/check-due-today", async (req, res) => {
   try {
-    const expiryChecker = require("../services/expiryChecker");
+    const expiryChecker = getExpiryChecker();
+    
+    if (!expiryChecker) {
+      return res.status(503).json({
+        success: false,
+        error: "Expiry checker not available"
+      });
+    }
+
     const results = await expiryChecker.checkDueTodayPackages();
     
     res.json({

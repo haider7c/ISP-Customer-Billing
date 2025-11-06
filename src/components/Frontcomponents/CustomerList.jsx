@@ -1,16 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { fetchCustomers, getBillStatusForMonth } from '../api';
 import BillPaymentCard from './BillPaymentCard.jsx';
 import { toast } from 'react-toastify';
-import axios from 'axios'; // Add this import
+import axios from 'axios';
 import 'react-toastify/dist/ReactToastify.css';
 
 const CustomerList = () => {
   const [customers, setCustomers] = useState([]);
-  const [filteredCustomers, setFilteredCustomers] = useState([]);
-  const [todaysCustomers, setTodaysCustomers] = useState([]);
-  const [pendingCustomers, setPendingCustomers] = useState([]);
-  const [upcomingCustomers, setUpcomingCustomers] = useState([]);
   const [billStatuses, setBillStatuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -46,9 +42,6 @@ const CustomerList = () => {
       
       setCustomers(customersData);
       setBillStatuses(billStatusData);
-      
-      // Categorize customers based on bill day
-      categorizeCustomers(customersData, billStatusData);
     } catch (error) {
       console.error("Error fetching data:", error);
       setError("Failed to load data. Please try again.");
@@ -58,54 +51,53 @@ const CustomerList = () => {
     }
   };
 
-  const categorizeCustomers = (customersData, billStatusData) => {
+  // Apply search filter to customers
+  const filteredCustomers = useMemo(() => {
+    if (!searchTerm.trim()) {
+      return customers;
+    }
+    
+    const term = searchTerm.toLowerCase();
+    return customers.filter(customer => 
+      customer.customerName?.toLowerCase().includes(term) ||
+      customer.cnic?.toLowerCase().includes(term) ||
+      customer.phone?.toLowerCase().includes(term) ||
+      customer.customerId?.toLowerCase().includes(term)
+    );
+  }, [customers, searchTerm]);
+
+  // Categorize customers based on filtered results
+  const { todaysCustomers, pendingCustomers, upcomingCustomers } = useMemo(() => {
     const today = selectedDay;
     
-    // Filter customers based on search term first
-    let filtered = customersData;
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      filtered = customersData.filter(customer => 
-        customer.customerName?.toLowerCase().includes(term) ||
-        customer.cnic?.toLowerCase().includes(term) ||
-        customer.phone?.toLowerCase().includes(term) ||
-        customer.customerId?.toLowerCase().includes(term)
-      );
-    }
-
     // Today's customers (billReceiveDate = today)
-    const todays = filtered.filter(customer => 
+    const todays = filteredCustomers.filter(customer => 
       parseInt(customer.billReceiveDate) === today
     );
 
     // Pending customers (billReceiveDate < today, bill not received)
-    const pending = filtered.filter(customer => {
+    const pending = filteredCustomers.filter(customer => {
       const billDay = parseInt(customer.billReceiveDate);
       const customerId = customer._id || customer.customerId;
-      const hasReceivedBill = billStatusData.some(status => 
-        status.customerId === customerId && status.received
-      );
+      const hasReceivedBill = billStatuses.some(status => {
+        const statusCustomerId = status.customerId?._id || status.customerId;
+        return statusCustomerId === customerId && status.received;
+      });
       
       return billDay < today && !hasReceivedBill;
     });
 
     // Upcoming customers (billReceiveDate > today)
-    const upcoming = filtered.filter(customer => 
+    const upcoming = filteredCustomers.filter(customer => 
       parseInt(customer.billReceiveDate) > today
     );
 
-    setTodaysCustomers(todays);
-    setPendingCustomers(pending);
-    setUpcomingCustomers(upcoming);
-    setFilteredCustomers(filtered);
-  };
-
-  // Refresh when search term changes
-  useEffect(() => {
-    if (customers.length > 0 && billStatuses.length > 0) {
-      categorizeCustomers(customers, billStatuses);
-    }
-  }, [searchTerm]);
+    return {
+      todaysCustomers: todays,
+      pendingCustomers: pending,
+      upcomingCustomers: upcoming
+    };
+  }, [filteredCustomers, billStatuses, selectedDay]);
 
   // Refresh bill statuses after payment
   const refreshBillStatuses = async () => {
@@ -113,7 +105,6 @@ const CustomerList = () => {
       setRefreshing(true);
       const billStatusData = await getBillStatusForMonth(selectedMonth, selectedYear);
       setBillStatuses(billStatusData);
-      categorizeCustomers(customers, billStatusData);
     } catch (error) {
       console.error("Error refreshing bill statuses:", error);
       toast.error("Failed to refresh bill statuses");
@@ -214,6 +205,9 @@ const CustomerList = () => {
   const currentYear = new Date().getFullYear();
   const years = Array.from({length: 6}, (_, i) => currentYear - 5 + i);
 
+  // Search info text
+  const searchInfo = searchTerm ? ` (${filteredCustomers.length} found for "${searchTerm}")` : '';
+
   return (
     <div className='flex flex-col'>
       {/* Payment Receipt Modal */}
@@ -286,7 +280,6 @@ const CustomerList = () => {
         </div>
       )}
 
-      {/* Rest of your CustomerList JSX remains the same */}
       {/* Search Bar */}
       <div className="mb-6 p-4 bg-gray-50 rounded-lg">
         <div className="relative">
@@ -312,6 +305,11 @@ const CustomerList = () => {
             />
           </svg>
         </div>
+        {searchTerm && (
+          <div className="mt-2 text-sm text-blue-600">
+            Found {filteredCustomers.length} customer(s) matching "{searchTerm}"
+          </div>
+        )}
       </div>
 
       {/* Day/Month/Year Selector */}
@@ -372,7 +370,7 @@ const CustomerList = () => {
       <div className="mb-8">
         <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
           <h2 className="text-xl font-bold text-blue-800">
-            📅 Today's Customers (Day {selectedDay})
+            📅 Today's Customers (Day {selectedDay}){searchInfo}
           </h2>
           <p className="text-blue-600">
             {todaysCustomers.length} customer(s) due for payment today
@@ -397,7 +395,7 @@ const CustomerList = () => {
         <div className="mb-8">
           <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 mb-4">
             <h2 className="text-xl font-bold text-yellow-800">
-              ⚠️ Pending Customers (Day 1 to {selectedDay - 1})
+              ⚠️ Pending Customers (Day 1 to {selectedDay - 1}){searchInfo}
             </h2>
             <p className="text-yellow-600">
               {pendingCustomers.length} customer(s) with pending payments from previous days
@@ -423,7 +421,7 @@ const CustomerList = () => {
         <div className="mb-8">
           <div className="bg-green-50 border-l-4 border-green-500 p-4 mb-4">
             <h2 className="text-xl font-bold text-green-800">
-              📋 Upcoming Customers (Day {selectedDay + 1} to 31)
+              📋 Upcoming Customers (Day {selectedDay + 1} to 31){searchInfo}
             </h2>
             <p className="text-green-600">
               {upcomingCustomers.length} customer(s) with upcoming payments
@@ -446,7 +444,7 @@ const CustomerList = () => {
 
       {todaysCustomers.length === 0 && pendingCustomers.length === 0 && upcomingCustomers.length === 0 && !loading && (
         <div className="text-center py-8 text-gray-500">
-          No customers found for the selected criteria.
+          {searchTerm ? `No customers found matching "${searchTerm}"` : "No customers found for the selected criteria."}
         </div>
       )}
     </div>

@@ -28,47 +28,42 @@ class WhatsAppService {
         }),
         puppeteer: {
           headless: true,
-          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+          args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox', 
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu'
+          ],
+          executablePath: process.platform === 'win32' 
+            ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+            : process.platform === 'darwin'
+            ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+            : '/usr/bin/google-chrome'
+        },
+        webVersionCache: {
+          type: 'remote',
+          remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
         }
       });
 
+      // Single QR event handler
       this.client.on('qr', (qr) => {
         console.log('📱 WhatsApp QR Code received');
         this.currentQR = qr;
         
-        // Send QR code to main window (which will forward to QR window)
+        // Send QR code to main window
         if (this.mainWindowRef && !this.mainWindowRef.isDestroyed()) {
-          console.log('Sending QR code to main window for forwarding...');
+          console.log('Sending QR code to main window...');
           this.mainWindowRef.webContents.send('whatsapp-qr', qr);
-        } else {
-          console.log('Main window not available for QR code forwarding');
         }
         
-        // Also generate terminal QR as fallback
+        // Generate terminal QR
         qrcode.generate(qr, { small: true });
         
-        // Save QR code to file for easy access
-        const qrFile = path.join(__dirname, '../../whatsapp-qr.txt');
-        fs.writeFileSync(qrFile, `Scan this QR code with WhatsApp:\n${qr}\nGenerated at: ${new Date().toISOString()}`);
-        console.log(`💾 QR code saved to: ${qrFile}`);
-      });
-
-      this.client.on('qr', (qr) => {
-        console.log('📱 WhatsApp QR Code received');
-        this.currentQR = qr;
-        
-        // Send QR code to frontend
-        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-          console.log('Sending QR code to frontend...');
-          this.mainWindow.webContents.send('whatsapp-qr', qr);
-        } else {
-          console.log('Main window not available for QR code');
-        }
-        
-        // Also generate terminal QR as fallback
-        qrcode.generate(qr, { small: true });
-        
-        // Save QR code to file for easy access
+        // Save QR code to file
         const qrFile = path.join(__dirname, '../../whatsapp-qr.txt');
         fs.writeFileSync(qrFile, `Scan this QR code with WhatsApp:\n${qr}\nGenerated at: ${new Date().toISOString()}`);
         console.log(`💾 QR code saved to: ${qrFile}`);
@@ -77,22 +72,27 @@ class WhatsAppService {
       this.client.on('ready', () => {
         console.log('✅ WhatsApp client is ready!');
         this.isReady = true;
+        this.currentQR = null; // Clear QR when ready
         
         // Notify frontend
-        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-          this.mainWindow.webContents.send('whatsapp-status', {
+        if (this.mainWindowRef && !this.mainWindowRef.isDestroyed()) {
+          this.mainWindowRef.webContents.send('whatsapp-status', {
             isReady: true,
             isConnected: true
           });
         }
       });
 
+      this.client.on('authenticated', () => {
+        console.log('✅ WhatsApp client authenticated!');
+      });
+
       this.client.on('auth_failure', (msg) => {
         console.error('❌ WhatsApp authentication failed:', msg);
         this.isReady = false;
         
-        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-          this.mainWindow.webContents.send('whatsapp-status', {
+        if (this.mainWindowRef && !this.mainWindowRef.isDestroyed()) {
+          this.mainWindowRef.webContents.send('whatsapp-status', {
             isReady: false,
             isConnected: false,
             error: msg
@@ -103,9 +103,10 @@ class WhatsAppService {
       this.client.on('disconnected', (reason) => {
         console.log('❌ WhatsApp client disconnected:', reason);
         this.isReady = false;
+        this.currentQR = null;
         
-        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-          this.mainWindow.webContents.send('whatsapp-status', {
+        if (this.mainWindowRef && !this.mainWindowRef.isDestroyed()) {
+          this.mainWindowRef.webContents.send('whatsapp-status', {
             isReady: false,
             isConnected: false,
             error: reason
@@ -115,6 +116,7 @@ class WhatsAppService {
         // Attempt to reconnect after 5 seconds
         setTimeout(() => {
           console.log('🔄 Attempting to reconnect WhatsApp...');
+          this.destroyClient();
           this.init();
         }, 5000);
       });
@@ -134,32 +136,55 @@ class WhatsAppService {
     }
   }
 
+  // Destroy client properly
+  async destroyClient() {
+    if (this.client) {
+      try {
+        await this.client.destroy();
+        this.client = null;
+      } catch (error) {
+        console.error('Error destroying client:', error);
+      }
+    }
+  }
+
   // Format phone number for WhatsApp
   formatPhoneNumber(phone) {
-    // Remove dashes and spaces from phone number
-    let cleaned = phone.replace(/[-\s]/g, '');
+    if (!phone) {
+      throw new Error('Phone number is required');
+    }
+
+    // Remove all non-digit characters
+    let cleaned = phone.replace(/\D/g, '');
     
-    // If number starts with 0, replace with country code
-    if (cleaned.startsWith('0')) {
-      cleaned = '92' + cleaned.substring(1);
+    // Remove leading zeros
+    cleaned = cleaned.replace(/^0+/, '');
+    
+    // If number starts with 92 and length is 10, it's good
+    // If number doesn't start with country code, add it
+    if (!cleaned.startsWith('92') && cleaned.length === 10) {
+      cleaned = '92' + cleaned;
     }
     
-    // Ensure it ends with @c.us for WhatsApp
-    if (!cleaned.endsWith('@c.us')) {
-      cleaned += '@c.us';
+    // Validate length
+    if (cleaned.length !== 12) {
+      throw new Error(`Invalid phone number length: ${cleaned}. Expected 12 digits, got ${cleaned.length}`);
     }
     
-    return cleaned;
+    // Add @c.us suffix
+    return cleaned + '@c.us';
   }
 
   // Send message to a customer
   async sendMessage(phone, message) {
-    if (!this.isReady) {
+    if (!this.isReady || !this.client) {
       throw new Error('WhatsApp client is not ready. Please scan QR code first.');
     }
 
     try {
       const formattedPhone = this.formatPhoneNumber(phone);
+      console.log(`📤 Sending message to ${formattedPhone}`);
+      
       const response = await this.client.sendMessage(formattedPhone, message);
       console.log(`✅ Message sent to ${phone}: ${response.id._serialized}`);
       return { success: true, messageId: response.id._serialized };
@@ -171,22 +196,25 @@ class WhatsAppService {
 
   // Check if customer's package expires tomorrow based on billReceiveDate
   isPackageExpiringTomorrow(customer) {
+    if (!customer || !customer.billReceiveDate) return false;
+    
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
     const tomorrowDay = tomorrow.getDate();
-    const customerExpiryDay = customer.billReceiveDate;
+    const customerExpiryDay = parseInt(customer.billReceiveDate);
     
-    // Check if tomorrow's day matches the customer's billReceiveDate
     return tomorrowDay === customerExpiryDay;
   }
 
   // Check if customer's package expires today based on billReceiveDate
   isPackageExpiringToday(customer) {
+    if (!customer || !customer.billReceiveDate) return false;
+    
     const today = new Date();
     const todayDay = today.getDate();
-    const customerExpiryDay = customer.billReceiveDate;
+    const customerExpiryDay = parseInt(customer.billReceiveDate);
     
     return todayDay === customerExpiryDay;
   }
@@ -198,6 +226,12 @@ class WhatsAppService {
       if (!customer) {
         throw new Error('Customer not found');
       }
+
+      if (!customer.phone) {
+        throw new Error('Customer phone number not found');
+      }
+
+      console.log(`🔔 Checking expiry for ${customer.customerName}, Day: ${customer.billReceiveDate}`);
 
       // Check if package expires tomorrow
       if (this.isPackageExpiringTomorrow(customer)) {
@@ -221,9 +255,10 @@ Your ISP Team 🌐`;
 
         const result = await this.sendMessage(customer.phone, message);
         
-        // Log the notification
         if (result.success) {
           console.log(`✅ Expiry reminder sent to ${customer.customerName} (${customer.phone}) - Expiry Day: ${customer.billReceiveDate}`);
+        } else {
+          console.log(`❌ Failed to send expiry reminder to ${customer.customerName}: ${result.error}`);
         }
         
         return result;
@@ -252,10 +287,13 @@ Your ISP Team 🌐`;
         
         if (result.success) {
           console.log(`✅ Urgent expiry reminder sent to ${customer.customerName} (${customer.phone}) - Expiry Day: ${customer.billReceiveDate}`);
+        } else {
+          console.log(`❌ Failed to send urgent reminder to ${customer.customerName}: ${result.error}`);
         }
         
         return result;
       } else {
+        console.log(`ℹ️ Package for ${customer.customerName} does not expire tomorrow or today (Today: ${new Date().getDate()}, Customer Day: ${customer.billReceiveDate})`);
         return { success: false, error: 'Package does not expire tomorrow or today' };
       }
     } catch (error) {
@@ -270,6 +308,10 @@ Your ISP Team 🌐`;
       const customer = await Customer.findById(customerId);
       if (!customer) {
         throw new Error('Customer not found');
+      }
+
+      if (!customer.phone) {
+        throw new Error('Customer phone number not found');
       }
 
       const message = `✅ *Payment Received - Thank You!*
@@ -296,6 +338,8 @@ Your ISP Team 🌐`;
       
       if (result.success) {
         console.log(`✅ Payment receipt sent to ${customer.customerName}`);
+      } else {
+        console.log(`❌ Failed to send payment receipt to ${customer.customerName}: ${result.error}`);
       }
       
       return result;
@@ -311,6 +355,10 @@ Your ISP Team 🌐`;
       const customer = await Customer.findById(customerId);
       if (!customer) {
         throw new Error('Customer not found');
+      }
+
+      if (!customer.phone) {
+        throw new Error('Customer phone number not found');
       }
 
       // Check if today is the bill due date
@@ -337,10 +385,13 @@ Your ISP Team 🌐`;
         
         if (result.success) {
           console.log(`✅ Bill reminder sent to ${customer.customerName} (${customer.phone}) - Due Day: ${customer.billReceiveDate}`);
+        } else {
+          console.log(`❌ Failed to send bill reminder to ${customer.customerName}: ${result.error}`);
         }
         
         return result;
       } else {
+        console.log(`ℹ️ Today is not the bill due date for ${customer.customerName} (Today: ${new Date().getDate()}, Customer Day: ${customer.billReceiveDate})`);
         return { success: false, error: 'Today is not the bill due date' };
       }
     } catch (error) {
@@ -365,24 +416,31 @@ Your ISP Team 🌐`;
 
   // Force QR code regeneration
   async regenerateQR() {
-    if (this.client) {
-      try {
-        await this.client.logout();
-        await this.client.destroy();
-        this.isReady = false;
-        this.currentQR = null;
-        this.init();
-        return { success: true, message: 'QR code regeneration initiated' };
-      } catch (error) {
-        return { success: false, error: error.message };
+    try {
+      console.log('🔄 Regenerating QR code...');
+      
+      if (this.client) {
+        await this.destroyClient();
       }
+      
+      this.isReady = false;
+      this.currentQR = null;
+      
+      // Reinitialize after a short delay
+      setTimeout(() => {
+        this.init();
+      }, 2000);
+      
+      return { success: true, message: 'QR code regeneration initiated' };
+    } catch (error) {
+      console.error('❌ Error regenerating QR:', error);
+      return { success: false, error: error.message };
     }
-    return { success: false, error: 'Client not initialized' };
   }
 }
+
 // Export factory function with proper singleton pattern
 let whatsappServiceInstance = null;
-
 
 module.exports = (mainWindow) => {
   if (!whatsappServiceInstance) {

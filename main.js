@@ -35,6 +35,7 @@ const CLOUD_MONGO_URI = 'mongodb+srv://ali777:LsocA2ih5dDHa7av@cluster0.hxvs0cu.
 const PORT = 5000;
 let mainWindow;
 let whatsappService;
+let isDatabaseConnected = false;
 
 // ========================
 // QR Code Window Setup
@@ -61,9 +62,7 @@ function createQRWindow() {
     },
   });
 
-  // Create QR HTML content with embedded QR code library
- // Create QR HTML content with proper QR code library
-const qrHTML = `
+  const qrHTML = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -310,85 +309,156 @@ const qrHTML = `
     }
   });
 }
+
+// ========================
+// Fixed Database Connection
+// ========================
 async function connectToDatabase() {
   try {
     console.log("🔄 Attempting to connect to MongoDB...");
     logToFile("🔄 Attempting to connect to MongoDB...");
     
-    // Add connection options for better stability
+    // Remove deprecated options and use modern connection settings
     const connectionOptions = {
-      serverSelectionTimeoutMS: 10000, // 10 seconds timeout
-      socketTimeoutMS: 45000, // 45 seconds socket timeout
+      serverSelectionTimeoutMS: 30000, // Increased timeout
+      socketTimeoutMS: 45000,
       maxPoolSize: 10,
       retryWrites: true,
-      w: 'majority'
+      w: 'majority',
+      // Remove deprecated bufferMaxEntries
+      connectTimeoutMS: 30000,
+      family: 4 // Use IPv4
     };
 
+    console.log("🌐 Connecting to MongoDB Atlas...");
+    
+    // Connect with proper error handling
     await mongoose.connect(CLOUD_MONGO_URI, connectionOptions);
     
+    // Set up connection event handlers
+    mongoose.connection.on('connected', () => {
+      console.log("✅ MongoDB connected successfully");
+      logToFile("✅ MongoDB connected successfully");
+      isDatabaseConnected = true;
+    });
+
+    mongoose.connection.on('error', (err) => {
+      console.error("❌ MongoDB connection error:", err);
+      logToFile(`❌ MongoDB connection error: ${err.message}`);
+      isDatabaseConnected = false;
+    });
+
+    mongoose.connection.on('disconnected', () => {
+      console.log("⚠️ MongoDB disconnected");
+      logToFile("⚠️ MongoDB disconnected");
+      isDatabaseConnected = false;
+    });
+
     console.log("✅ Connected to MongoDB Atlas");
     logToFile("✅ Connected to MongoDB Atlas");
+    isDatabaseConnected = true;
     return true;
+    
   } catch (err) {
     console.error("❌ MongoDB Connection Error:", err.message);
     logToFile(`❌ MongoDB Connection Error: ${err.message}`);
+    isDatabaseConnected = false;
     
-    // Try alternative connection method
+    // Try alternative connection without appName
     console.log("🔄 Trying alternative connection method...");
-    logToFile("🔄 Trying alternative connection method...");
     try {
-      // Sometimes removing the appName helps
       const altUri = 'mongodb+srv://ali777:LsocA2ih5dDHa7av@cluster0.hxvs0cu.mongodb.net/ispos?retryWrites=true&w=majority';
       await mongoose.connect(altUri, {
-        serverSelectionTimeoutMS: 10000,
-        socketTimeoutMS: 45000
+        serverSelectionTimeoutMS: 30000,
+        socketTimeoutMS: 45000,
+        maxPoolSize: 10
       });
       console.log("✅ Connected to MongoDB via alternative method");
       logToFile("✅ Connected to MongoDB via alternative method");
+      isDatabaseConnected = true;
       return true;
     } catch (altErr) {
-      console.error("❌ Alternative connection also failed:", altErr.message);
+      console.error("❌ Alternative connection failed:", altErr.message);
       logToFile(`❌ Alternative connection failed: ${altErr.message}`);
       return false;
     }
   }
 }
 
+// ========================
+// Enhanced Backend Server with Database Status
+// ========================
 function startBackendServer(mainWindow) {
   const backendApp = express();
 
-  // Connect to cloud MongoDB with retry logic
-  const connectWithRetry = async () => {
-    const connected = await connectToDatabase();
-    if (!connected) {
-      console.log("🔄 Retrying connection in 5 seconds...");
-      logToFile("🔄 Retrying connection in 5 seconds...");
-      setTimeout(connectWithRetry, 5000);
+  // Enhanced connection with better retry logic
+  const connectWithRetry = async (retryCount = 0) => {
+    const maxRetries = 3;
+    
+    try {
+      const connected = await connectToDatabase();
+      
+      if (connected) {
+        console.log("🎉 Database connection established!");
+        logToFile("🎉 Database connection established!");
+        createMonthlyBills();
+        return;
+      }
+    } catch (error) {
+      console.error(`Connection attempt ${retryCount + 1} failed:`, error.message);
+    }
+
+    if (retryCount < maxRetries) {
+      const delay = Math.min(10000 * (retryCount + 1), 30000);
+      console.log(`🔄 Retrying connection in ${delay/1000} seconds... (Attempt ${retryCount + 1}/${maxRetries})`);
+      logToFile(`🔄 Retrying connection in ${delay/1000} seconds... (Attempt ${retryCount + 1}/${maxRetries})`);
+      
+      setTimeout(() => connectWithRetry(retryCount + 1), delay);
     } else {
-      // Start monthly bill creation after successful connection
-      createMonthlyBills();
+      console.log("❌ Maximum connection retries reached. Running in limited mode.");
+      logToFile("❌ Maximum connection retries reached. Running in limited mode.");
+      // We'll continue without database connection but routes will handle errors
     }
   };
 
+  // Start connection process
   connectWithRetry();
 
+  // Middleware
   backendApp.use(cors());
-  backendApp.use(bodyParser.json());
-  backendApp.use(bodyParser.urlencoded({ extended: true }));
+  backendApp.use(bodyParser.json({ limit: '10mb' }));
+  backendApp.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
-  // ✅ Log every request
+  // Request logging middleware with database status
   backendApp.use((req, res, next) => {
-    logToFile(`📥 ${req.method} ${req.url}`);
+    const dbStatus = isDatabaseConnected ? '✅ DB Connected' : '❌ DB Disconnected';
+    logToFile(`📥 ${req.method} ${req.url} - ${dbStatus}`);
+    console.log(`📥 ${req.method} ${req.url} - ${dbStatus}`);
+    
+    // Add database status to request for routes to use
+    req.isDatabaseConnected = isDatabaseConnected;
     next();
   });
 
-  // Load all routes first
-  backendApp.use('/api/customers', customerRoutes);
-  backendApp.use("/api/serialNumber", serialNumberRoute);
-  backendApp.use("/api/bills", billRoutes);
-  backendApp.use("/api/packages", packageRoutes);
-  backendApp.use("/api/manualBill", manualBill);
-  backendApp.use("/api/billStatus", billStatusRoutes);
+  // Database connection check middleware
+  const checkDB = (req, res, next) => {
+    if (!isDatabaseConnected) {
+      return res.status(503).json({
+        success: false,
+        error: "Database not connected. Please check your internet connection and try again.",
+        timestamp: new Date().toISOString()
+      });
+    }
+    next();
+  };
+
+  // Load all routes with database check
+  backendApp.use('/api/customers', checkDB, customerRoutes);
+  backendApp.use("/api/serialNumber", checkDB, serialNumberRoute);
+  backendApp.use("/api/bills", checkDB, billRoutes);
+  backendApp.use("/api/packages", checkDB, packageRoutes);
+  backendApp.use("/api/manualBill", checkDB, manualBill);
+  backendApp.use("/api/billStatus", checkDB, billStatusRoutes);
 
   // Load WhatsApp routes with better error handling
   try {
@@ -418,14 +488,35 @@ function startBackendServer(mainWindow) {
     });
   }
 
-  // Health check endpoint
+  // Enhanced health check endpoint
   backendApp.get("/api/health", (req, res) => {
     const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
     res.json({ 
       status: 'ok', 
       database: dbStatus,
+      isDatabaseConnected: isDatabaseConnected,
+      whatsapp: whatsappService ? whatsappService.getStatus() : { isReady: false },
       timestamp: new Date().toISOString()
     });
+  });
+
+  // Database connection endpoint
+  backendApp.post("/api/database/reconnect", async (req, res) => {
+    try {
+      console.log("🔄 Manual database reconnection requested");
+      const result = await connectToDatabase();
+      res.json({ 
+        success: result, 
+        message: result ? "Database reconnected successfully" : "Database reconnection failed",
+        isDatabaseConnected 
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        error: error.message,
+        isDatabaseConnected: false
+      });
+    }
   });
 
   backendApp.get("/api/date", (req, res) => {
@@ -438,7 +529,18 @@ function startBackendServer(mainWindow) {
   });
 
   backendApp.get("/", (req, res) => {
-    res.send("API is running...");
+    res.send(`
+      <html>
+        <head><title>ISP Billing System API</title></head>
+        <body>
+          <h1>ISP Billing System API</h1>
+          <p>Status: <strong>Running</strong></p>
+          <p>Database: <strong>${isDatabaseConnected ? 'Connected' : 'Disconnected'}</strong></p>
+          <p>WhatsApp: <strong>${whatsappService && whatsappService.isReady ? 'Connected' : 'Disconnected'}</strong></p>
+          <p><a href="/api/health">Health Check</a></p>
+        </body>
+      </html>
+    `);
   });
 
   // Handle undefined routes
@@ -446,56 +548,70 @@ function startBackendServer(mainWindow) {
     res.status(404).json({ error: "Route not found" });
   });
 
+  // Error handling middleware
   backendApp.use((err, req, res, next) => {
-    console.error(err.stack);
+    console.error('❌ Backend Error:', err.stack);
     logToFile(`❌ Backend Error: ${err.stack}`);
-    res.status(500).json({ error: "An unexpected error occurred" });
+    
+    res.status(500).json({ 
+      error: "An unexpected error occurred",
+      message: err.message,
+      timestamp: new Date().toISOString()
+    });
   });
 
+  // Start server
   backendApp.listen(PORT, () => {
     console.log(`🚀 Backend server running at http://localhost:${PORT}`);
     logToFile(`🚀 Backend server running at http://localhost:${PORT}`);
   });
 
-  // Initialize WhatsApp service AFTER server starts
-// Initialize WhatsApp service AFTER server starts
-setTimeout(() => {
-  try {
-    console.log('🔄 Initializing WhatsApp service...');
-    
-    const createWhatsAppService = require("./src/services/whatsappService");
-    whatsappService = createWhatsAppService(mainWindow);
-    console.log("✅ WhatsApp service initialized with frontend integration");
-    logToFile("✅ WhatsApp service initialized with frontend integration");
-    
-    // Setup QR code forwarding to any open QR windows
-    if (whatsappService.client) {
-      whatsappService.client.on('qr', (qr) => {
-        console.log('📱 QR Code generated, forwarding to QR window...');
-        if (qrWindow && !qrWindow.isDestroyed()) {
-          setTimeout(() => {
-            qrWindow.webContents.send('whatsapp-qr', qr);
-            console.log('✅ QR code sent to QR window');
-          }, 1000);
-        }
-      });
+  // Initialize WhatsApp service
+  setTimeout(() => {
+    try {
+      console.log('🔄 Initializing WhatsApp service...');
       
-      whatsappService.client.on('ready', () => {
-        console.log('✅ WhatsApp ready, notifying QR window...');
-        if (qrWindow && !qrWindow.isDestroyed()) {
-          qrWindow.webContents.send('whatsapp-status', {
-            isReady: true,
-            isConnected: true
-          });
-        }
-      });
+      const createWhatsAppService = require("./src/services/whatsappService");
+      whatsappService = createWhatsAppService(mainWindow);
+      console.log("✅ WhatsApp service initialized with frontend integration");
+      logToFile("✅ WhatsApp service initialized with frontend integration");
+      
+      // Setup QR code forwarding to any open QR windows
+      if (whatsappService.client) {
+        whatsappService.client.on('qr', (qr) => {
+          console.log('📱 QR Code generated, forwarding to QR window...');
+          if (qrWindow && !qrWindow.isDestroyed()) {
+            setTimeout(() => {
+              qrWindow.webContents.send('whatsapp-qr', qr);
+              console.log('✅ QR code sent to QR window');
+            }, 1000);
+          }
+        });
+        
+        whatsappService.client.on('ready', () => {
+          console.log('✅ WhatsApp ready, notifying QR window...');
+          if (qrWindow && !qrWindow.isDestroyed()) {
+            qrWindow.webContents.send('whatsapp-status', {
+              isReady: true,
+              isConnected: true
+            });
+          }
+        });
+      }
+
+      // Initialize expiry checker with WhatsApp service
+      const expiryChecker = require("./src/services/expiryChecker");
+      if (whatsappService) {
+        expiryChecker.setWhatsAppService(whatsappService);
+        console.log("✅ Expiry checker initialized with WhatsApp service");
+      }
+      
+    } catch (error) {
+      console.log("⚠️ WhatsApp service not available: " + error.message);
+      logToFile("⚠️ WhatsApp service not available: " + error.message);
     }
-  } catch (error) {
-    console.log("⚠️ WhatsApp service not available: " + error.message);
-    logToFile("⚠️ WhatsApp service not available: " + error.message);
-    console.log("Error stack:", error.stack);
-  }
-}, 3000);
+  }, 3000);
+
   // Add IPC handlers for WhatsApp
   ipcMain.handle('get-whatsapp-status', () => {
     return whatsappService ? whatsappService.getStatus() : { isReady: false, isConnected: false };
@@ -512,31 +628,51 @@ setTimeout(() => {
     }
     return { success: false, error: 'WhatsApp service not available' };
   });
+
   // Handle QR window ready event
-ipcMain.on('qr-window-ready', (event) => {
-  console.log('QR window is ready, sending current data...');
-  
-  // Send current status
-  if (whatsappService) {
-    const status = whatsappService.getStatus();
-    event.reply('whatsapp-status', status);
+  ipcMain.on('qr-window-ready', (event) => {
+    console.log('QR window is ready, sending current data...');
     
-    // Send current QR code if available
-    if (whatsappService.currentQR) {
-      setTimeout(() => {
-        event.reply('whatsapp-qr', whatsappService.currentQR);
-      }, 500);
+    // Send current status
+    if (whatsappService) {
+      const status = whatsappService.getStatus();
+      event.reply('whatsapp-status', status);
+      
+      // Send current QR code if available
+      if (whatsappService.currentQR) {
+        setTimeout(() => {
+          event.reply('whatsapp-qr', whatsappService.currentQR);
+        }, 500);
+      }
     }
-  }
-});
+  });
 
   ipcMain.handle('regenerate-qr', async () => {
-  if (whatsappService) {
-    const result = await whatsappService.regenerateQR();
-    return result;
-  }
-  return { success: false, error: 'WhatsApp service not available' };
-});
+    if (whatsappService) {
+      const result = await whatsappService.regenerateQR();
+      return result;
+    }
+    return { success: false, error: 'WhatsApp service not available' };
+  });
+
+  // Database reconnection handler
+  ipcMain.handle('reconnect-database', async () => {
+    try {
+      const result = await connectToDatabase();
+      return { 
+        success: result, 
+        isDatabaseConnected,
+        message: result ? 'Database reconnected successfully' : 'Database reconnection failed'
+      };
+    } catch (error) {
+      return { 
+        success: false, 
+        isDatabaseConnected: false,
+        error: error.message 
+      };
+    }
+  });
+
   // Start WhatsApp service after a delay
   setTimeout(() => {
     try {
@@ -551,18 +687,17 @@ ipcMain.on('qr-window-ready', (event) => {
   }, 5000);
 }
 
-// Debug: Check WhatsApp service status every 5 seconds
+// Debug: Check service status every 10 seconds
 setInterval(() => {
   if (whatsappService) {
-    console.log('WhatsApp Service Status:', {
-      isReady: whatsappService.isReady,
-      hasQR: !!whatsappService.currentQR,
-      clientInitialized: !!whatsappService.client
+    console.log('🔍 Service Status:', {
+      whatsappReady: whatsappService.isReady,
+      whatsappHasQR: !!whatsappService.currentQR,
+      databaseConnected: isDatabaseConnected,
+      mongooseState: mongoose.connection.readyState
     });
-  } else {
-    console.log('WhatsApp Service: NOT INITIALIZED');
   }
-}, 5000);
+}, 10000);
 
 // ========================
 // Monthly Bill Creation
@@ -570,7 +705,7 @@ setInterval(() => {
 async function createMonthlyBills() {
   try {
     // Check if MongoDB is connected
-    if (mongoose.connection.readyState !== 1) {
+    if (!isDatabaseConnected || mongoose.connection.readyState !== 1) {
       console.log("⚠️ MongoDB not connected, skipping bill creation");
       logToFile("⚠️ MongoDB not connected, skipping bill creation");
       return;

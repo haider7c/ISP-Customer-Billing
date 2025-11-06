@@ -1,19 +1,29 @@
 const Customer = require('../models/Customer');
-const whatsappService = require('./whatsappService');
 
 class ExpiryChecker {
   constructor() {
     this.isRunning = false;
+    this.whatsappService = null;
+  }
+
+  // Set WhatsApp service instance
+  setWhatsAppService(service) {
+    this.whatsappService = service;
   }
 
   // Check for packages expiring tomorrow (based on billReceiveDate)
   async checkExpiringPackages() {
     try {
+      if (!this.whatsappService) {
+        throw new Error('WhatsApp service not available');
+      }
+
       const today = new Date();
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
       
       const tomorrowDay = tomorrow.getDate();
+      console.log(`🔍 Checking packages expiring tomorrow (Day ${tomorrowDay})`);
 
       // Find all customers whose billReceiveDate matches tomorrow's day
       const expiringCustomers = await Customer.find({
@@ -25,7 +35,8 @@ class ExpiryChecker {
       const results = [];
       for (const customer of expiringCustomers) {
         try {
-          const result = await whatsappService.sendExpiryReminder(customer._id);
+          console.log(`📤 Processing expiry reminder for: ${customer.customerName} (${customer.phone})`);
+          const result = await this.whatsappService.sendExpiryReminder(customer._id);
           results.push({
             customer: customer.customerName,
             phone: customer.phone,
@@ -35,7 +46,11 @@ class ExpiryChecker {
             success: result.success,
             error: result.error
           });
+
+          // Add delay between messages to avoid rate limiting
+          await this.delay(1000);
         } catch (error) {
+          console.error(`❌ Error processing customer ${customer.customerName}:`, error);
           results.push({
             customer: customer.customerName,
             phone: customer.phone,
@@ -55,8 +70,13 @@ class ExpiryChecker {
   // Check for packages due today (bill reminder)
   async checkDueTodayPackages() {
     try {
+      if (!this.whatsappService) {
+        throw new Error('WhatsApp service not available');
+      }
+
       const today = new Date();
       const todayDay = today.getDate();
+      console.log(`🔍 Checking packages due today (Day ${todayDay})`);
 
       // Find all customers whose billReceiveDate matches today's day
       const dueCustomers = await Customer.find({
@@ -68,7 +88,8 @@ class ExpiryChecker {
       const results = [];
       for (const customer of dueCustomers) {
         try {
-          const result = await whatsappService.sendBillReminder(customer._id);
+          console.log(`📤 Processing bill reminder for: ${customer.customerName} (${customer.phone})`);
+          const result = await this.whatsappService.sendBillReminder(customer._id);
           results.push({
             customer: customer.customerName,
             phone: customer.phone,
@@ -78,7 +99,11 @@ class ExpiryChecker {
             success: result.success,
             error: result.error
           });
+
+          // Add delay between messages to avoid rate limiting
+          await this.delay(1000);
         } catch (error) {
+          console.error(`❌ Error processing customer ${customer.customerName}:`, error);
           results.push({
             customer: customer.customerName,
             phone: customer.phone,
@@ -143,6 +168,11 @@ class ExpiryChecker {
     }
   }
 
+  // Utility function for delays
+  delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   // Start automatic daily checks
   startDailyChecks() {
     if (this.isRunning) {
@@ -163,18 +193,23 @@ class ExpiryChecker {
 
     const timeUntilNext = nextCheck - now;
 
+    console.log(`⏰ Daily checks scheduled to start at: ${nextCheck.toLocaleString()}`);
+
     setTimeout(() => {
       this.runDailyCheck();
       // Run every 24 hours
       setInterval(() => this.runDailyCheck(), 24 * 60 * 60 * 1000);
     }, timeUntilNext);
-
-    console.log(`⏰ Daily checks scheduled to start at: ${nextCheck.toLocaleString()}`);
   }
 
   async runDailyCheck() {
     try {
       console.log('🔔 Running daily checks...');
+      
+      if (!this.whatsappService || !this.whatsappService.isReady) {
+        console.log('⚠️ WhatsApp not ready, skipping daily checks');
+        return;
+      }
       
       // Check for packages expiring tomorrow
       const expiryResults = await this.checkExpiringPackages();
